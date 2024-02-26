@@ -203,7 +203,7 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 	}
 
 	if userVo.Calls < session.Model.Weight {
-		utils.ReplyMessage(ws, fmt.Sprintf("您当前剩余对话次数（%d）已不足以支付当前模型的单次对话需要消耗的对话额度（%d）！", userVo.Calls, session.Model.Weight))
+		utils.ReplyMessage(ws, fmt.Sprintf("您当前剩余对话次数（%d）已不足以支付当前模型的单次对话需要消耗的对话额度（%d）！,请去往充值页面进行充值！", userVo.Calls, session.Model.Weight))
 		utils.ReplyMessage(ws, ErrImg)
 		return nil
 	}
