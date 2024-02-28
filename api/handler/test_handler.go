@@ -203,7 +203,7 @@ func (h *TestHandler) initUserNickname(c *gin.Context) {
 	}
 
 	for _, u := range users {
-		u.Nickname = fmt.Sprintf("极客学长@%d", utils.RandomNumber(6))
+		u.Nickname = fmt.Sprintf("AI旋风@%d", utils.RandomNumber(6))
 		h.db.Updates(&u)
 	}
 
