@@ -204,13 +204,13 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 
 	if userVo.Calls < session.Model.Weight {
 		utils.ReplyMessage(ws, fmt.Sprintf("您当前剩余对话次数（%d）已不足以支付当前模型的单次对话需要消耗的对话额度（%d）！,请去往充值页面进行充值！", userVo.Calls, session.Model.Weight))
-		utils.ReplyMessage(ws, ErrImg)
+		//utils.ReplyMessage(ws, ErrImg)
 		return nil
 	}
 
 	if userVo.Calls <= 0 && userVo.ChatConfig.ApiKeys[session.Model.Platform] == "" {
 		utils.ReplyMessage(ws, "您的对话次数已经用尽，请联系管理员或者充值点卡继续对话！")
-		utils.ReplyMessage(ws, ErrImg)
+		//utils.ReplyMessage(ws, ErrImg)
 		return nil
 	}
 
