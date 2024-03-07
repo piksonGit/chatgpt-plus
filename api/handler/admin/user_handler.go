@@ -98,7 +98,7 @@ func (h *UserHandler) Save(c *gin.Context) {
 		salt := utils.RandString(8)
 		u := model.User{
 			Username:    data.Username,
-			Nickname:    fmt.Sprintf("极客学长@%d", utils.RandomNumber(6)),
+			Nickname:    fmt.Sprintf("AI旋风@%d", utils.RandomNumber(6)),
 			Password:    utils.GenPassword(data.Password, salt),
 			Avatar:      "/images/avatar/user.png",
 			Salt:        salt,
