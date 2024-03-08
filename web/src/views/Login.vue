@@ -64,7 +64,7 @@ import {prevRoute} from "@/router";
 import ResetPass from "@/components/ResetPass.vue";
 
 const router = useRouter();
-const title = ref('ChatPlus 用户登录');
+const title = ref('旋风AI 用户登录');
 const username = ref(process.env.VUE_APP_USER);
 const password = ref(process.env.VUE_APP_PASS);
 const showResetPass = ref(false)
