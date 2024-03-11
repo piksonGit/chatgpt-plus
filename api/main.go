@@ -136,6 +136,7 @@ func main() {
 		fx.Provide(admin.NewChatModelHandler),
 		fx.Provide(admin.NewProductHandler),
 		fx.Provide(admin.NewOrderHandler),
+		fx.Provide(admin.NewChatHandler),
 
 		// 创建服务
 		fx.Provide(sms.NewSendServiceManager),
@@ -218,6 +219,7 @@ func main() {
 		fx.Invoke(func(s *core.AppServer, h *handler.UploadHandler) {
 			s.Engine.POST("/api/upload", h.Upload)
 			s.Engine.GET("/api/upload/list", h.List)
+			s.Engine.GET("/api/upload/remove", h.Remove)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *handler.SmsHandler) {
 			group := s.Engine.Group("/api/sms/")
@@ -371,7 +373,14 @@ func main() {
 			group.POST("zaobao", h.ZaoBao)
 			group.POST("dalle3", h.Dall3)
 		}),
-
+		fx.Invoke(func(s *core.AppServer, h *admin.ChatHandler) {
+			group := s.Engine.Group("/api/admin/chat/")
+			group.POST("list", h.List)
+			group.POST("message", h.Messages)
+			group.GET("history", h.History)
+			group.GET("remove", h.RemoveChat)
+			group.GET("message/remove", h.RemoveMessage)
+		}),
 		fx.Provide(handler.NewTestHandler),
 		fx.Invoke(func(s *core.AppServer, h *handler.TestHandler) {
 			s.Engine.GET("/api/test", h.Test)

@@ -24,6 +24,7 @@ type Service struct {
 	httpClient       *req.Client
 	config           types.StableDiffusionConfig
 	taskQueue        *store.RedisQueue
+	notifyQueue      *store.RedisQueue
 	db               *gorm.DB
 	uploadManager    *oss.UploaderManager
 	name             string            // service name
@@ -33,12 +34,13 @@ type Service struct {
 	taskTimeout      int64
 }
 
-func NewService(name string, maxTaskNum int32, timeout int64, config types.StableDiffusionConfig, queue *store.RedisQueue, db *gorm.DB, manager *oss.UploaderManager) *Service {
+func NewService(name string, maxTaskNum int32, timeout int64, config types.StableDiffusionConfig, taskQueue *store.RedisQueue, notifyQueue *store.RedisQueue, db *gorm.DB, manager *oss.UploaderManager) *Service {
 	return &Service{
 		name:             name,
 		config:           config,
 		httpClient:       req.C(),
-		taskQueue:        queue,
+		taskQueue:        taskQueue,
+		notifyQueue:      notifyQueue,
 		db:               db,
 		uploadManager:    manager,
 		taskTimeout:      timeout,
@@ -66,13 +68,18 @@ func (s *Service) Run() {
 		logger.Infof("%s handle a new Stable-Diffusion task: %+v", s.name, task)
 		err = s.Txt2Img(task)
 		if err != nil {
-			logger.Error("绘画任务执行失败：", err)
+			logger.Error("绘画任务执行失败：", err.Error())
 			// update the task progress
-			s.db.Model(&model.SdJob{Id: uint(task.Id)}).UpdateColumn("progress", -1)
+			s.db.Model(&model.SdJob{Id: uint(task.Id)}).UpdateColumns(map[string]interface{}{
+				"progress": -1,
+				"err_msg":  err.Error(),
+			})
 			// restore img_call quota
 			s.db.Model(&model.User{}).Where("id = ?", task.UserId).UpdateColumn("img_calls", gorm.Expr("img_calls + ?", 1))
 			// release task num
 			atomic.AddInt32(&s.handledTaskNum, -1)
+			// 通知前端，任务失败
+			s.notifyQueue.RPush(task.UserId)
 			continue
 		}
 
@@ -296,7 +303,10 @@ func (s *Service) callback(data CBReq) {
 	} else { // 任务失败
 		logger.Error("任务执行失败：", data.Message)
 		// update the task progress
-		s.db.Model(&model.SdJob{Id: uint(data.JobId)}).UpdateColumn("progress", -1)
+		s.db.Model(&model.SdJob{Id: uint(data.JobId)}).UpdateColumns(map[string]interface{}{
+			"progress": -1,
+			"err_msg":  data.Message,
+		})
 		// restore img_calls
 		s.db.Model(&model.User{}).Where("id = ? AND img_calls > 0", data.UserId).UpdateColumn("img_calls", gorm.Expr("img_calls + ?", 1))
 	}

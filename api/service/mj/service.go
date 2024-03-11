@@ -65,20 +65,29 @@ func (s *Service) Run() {
 		logger.Infof("%s handle a new MidJourney task: %+v", s.name, task)
 		switch task.Type {
 		case types.TaskImage:
-			err = s.client.Imagine(task.Prompt)
+			err = s.client.Imagine(task)
 			break
 		case types.TaskUpscale:
-			err = s.client.Upscale(task.Index, task.MessageId, task.MessageHash)
-
+			err = s.client.Upscale(task)
 			break
 		case types.TaskVariation:
-			err = s.client.Variation(task.Index, task.MessageId, task.MessageHash)
+			err = s.client.Variation(task)
+			break
+		case types.TaskBlend:
+			err = s.client.Blend(task)
+			break
+		case types.TaskSwapFace:
+			err = s.client.SwapFace(task)
+			break
 		}
 
 		if err != nil {
-			logger.Error("绘画任务执行失败：", err)
+			logger.Error("绘画任务执行失败：", err.Error())
 			// update the task progress
-			s.db.Model(&model.MidJourneyJob{Id: uint(task.Id)}).UpdateColumn("progress", -1)
+			s.db.Model(&model.MidJourneyJob{Id: uint(task.Id)}).UpdateColumns(map[string]interface{}{
+				"progress": -1,
+				"err_msg":  err.Error(),
+			})
 			s.notifyQueue.RPush(task.UserId)
 			// restore img_call quota
 			if task.Type.String() != types.TaskUpscale.String() {
@@ -88,7 +97,7 @@ func (s *Service) Run() {
 		}
 
 		// lock the task until the execute timeout
-		s.taskStartTimes[task.Id] = time.Now()
+		s.taskStartTimes[int(task.Id)] = time.Now()
 		atomic.AddInt32(&s.handledTaskNum, 1)
 
 	}
@@ -128,6 +137,12 @@ func (s *Service) Notify(data CBReq) {
 	} else {
 		tx = tx.Where("task_id = ?", split[0])
 	}
+	// fixed: 修复 U/V 操作任务混淆覆盖的 Bug
+	if strings.Contains(data.Prompt, "** - Image #") { // for upscale
+		tx = tx.Where("type = ?", types.TaskUpscale.String())
+	} else if strings.Contains(data.Prompt, "** - Variations (Strong)") { // for Variations
+		tx = tx.Where("type = ?", types.TaskVariation.String())
+	}
 	res = tx.First(&job)
 	if res.Error != nil {
 		logger.Warn("非法任务：", res.Error)
@@ -143,7 +158,7 @@ func (s *Service) Notify(data CBReq) {
 	job.OrgURL = data.Image.URL
 	if s.client.Config.UseCDN {
 		job.UseProxy = true
-		job.ImgURL = strings.ReplaceAll(data.Image.URL, "https://cdn.discordapp.com", s.client.imgCdnURL)
+		job.ImgURL = strings.ReplaceAll(data.Image.URL, "https://cdn.discordapp.com", s.client.Config.ImgCdnURL)
 	}
 
 	res = s.db.Updates(&job)

@@ -5,29 +5,45 @@ import 'vant/lib/index.css';
 import App from './App.vue'
 import {createPinia} from "pinia";
 import {
+    Badge,
     Button,
     Cell,
     CellGroup,
+    Circle,
+    Col,
+    Collapse,
+    CollapseItem,
     ConfigProvider,
     Dialog,
     DropdownItem,
     DropdownMenu,
+    Empty,
     Field,
     Form,
+    Grid,
+    GridItem,
     Icon,
     Image,
+    ImagePreview,
+    Lazyload,
     List,
+    Loading,
     NavBar,
     Notify,
+    Overlay,
     Picker,
     Popup,
+    Row,
     Search,
     ShareSheet,
+    Slider,
     Sticky,
     SwipeCell,
     Switch,
+    Tab,
     Tabbar,
     TabbarItem,
+    Tabs,
     Tag,
     TextEllipsis,
     Uploader
@@ -65,6 +81,22 @@ app.use(Switch);
 app.use(Uploader);
 app.use(Tag);
 app.use(V3waterfall)
+app.use(Overlay)
+app.use(Col)
+app.use(Row)
+app.use(Slider)
+app.use(Badge)
+app.use(Collapse);
+app.use(CollapseItem);
+app.use(Grid);
+app.use(GridItem);
+app.use(Empty);
+app.use(Circle);
+app.use(Loading);
+app.use(Lazyload);
+app.use(ImagePreview);
+app.use(Tab);
+app.use(Tabs);
 app.use(router).use(ElementPlus).mount('#app')
 
 

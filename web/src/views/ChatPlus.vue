@@ -117,12 +117,27 @@
               <span>导出会话</span>
             </el-button>
 
-            <el-button type="warning" @click="showFeedbackDialog = true">
-              <el-icon>
-                <Promotion/>
-              </el-icon>
-              <span>意见反馈</span>
-            </el-button>
+            <el-tooltip class="box-item"
+                        effect="dark"
+                        content="部署文档"
+                        placement="bottom">
+              <a href="https://ai.r9it.com/docs/install/" target="_blank">
+                <el-button type="primary" circle>
+                  <i class="iconfont icon-book"></i>
+                </el-button>
+              </a>
+            </el-tooltip>
+
+            <el-tooltip class="box-item"
+                        effect="dark"
+                        content="项目源码"
+                        placement="bottom">
+              <a href="https://github.com/yangjian102621/chatgpt-plus" target="_blank">
+                <el-button type="success" circle>
+                  <i class="iconfont icon-github"></i>
+                </el-button>
+              </a>
+            </el-tooltip>
           </div>
         </div>
 
@@ -205,28 +220,6 @@
     </el-container>
 
     <el-dialog
-        v-model="showFeedbackDialog"
-        :show-close="true"
-        width="340px"
-        title="意见反馈"
-    >
-      <el-alert type="info" :closable="false">
-        <div style="font-size: 14px">
-          如果您对本项目有任何改进意见，您可以通过 Github
-          <el-link style="color: #f56c6c; font-weight: bold;"
-                   href="https://github.com/yangjian102621/chatgpt-plus/issues">
-            提交改进意见
-          </el-link>
-          或者通过扫描下面的微信二维码加入 AI 技术交流群。
-        </div>
-      </el-alert>
-
-      <div style="text-align: center;padding-top: 10px;">
-        <el-image :src="wechatCardURL"/>
-      </div>
-    </el-dialog>
-
-    <el-dialog
         v-model="showNotice"
         :show-close="true"
         custom-class="notice-dialog"
@@ -256,7 +249,7 @@ import {
   ArrowDown,
   Check,
   Close,
-  Delete,
+  Delete, Document,
   Edit,
   Plus,
   Promotion,
@@ -266,7 +259,15 @@ import {
   VideoPause
 } from '@element-plus/icons-vue'
 import 'highlight.js/styles/a11y-dark.css'
-import {dateFormat, isImage, isMobile, randString, removeArrayItem, UUID} from "@/utils/libs";
+import {
+  dateFormat,
+  escapeHTML,
+  isMobile,
+  processContent,
+  randString,
+  removeArrayItem,
+  UUID
+} from "@/utils/libs";
 import {ElMessage, ElMessageBox} from "element-plus";
 import hl from "highlight.js";
 import {getSessionId, getUserToken, removeUserToken} from "@/store/session";
@@ -299,11 +300,9 @@ const showConfigDialog = ref(false);
 const isLogin = ref(false)
 const showHello = ref(true)
 const textInput = ref(null)
-const showFeedbackDialog = ref(false)
 const showNotice = ref(false)
 const notice = ref("")
 const noticeKey = ref("SYSTEM_NOTICE")
-const wechatCardURL = ref("/images/wx.png")
 
 if (isMobile()) {
   router.replace("/mobile")
@@ -353,7 +352,6 @@ onMounted(() => {
     // 获取系统配置
     httpGet("/api/admin/config/get?key=system").then(res => {
       title.value = res.data.title
-      wechatCardURL.value = res.data['wechat_card_url']
     }).catch(e => {
       ElMessage.error("获取系统配置失败：" + e.message)
     })
@@ -509,6 +507,8 @@ const removeChat = function (event, chat) {
   curOpt.value = 'remove';
 }
 
+const latexPlugin = require('markdown-it-latex2img')
+const mathjaxPlugin = require('markdown-it-mathjax')
 const md = require('markdown-it')({
   breaks: true,
   html: true,
@@ -533,6 +533,8 @@ const md = require('markdown-it')({
     return `<pre class="code-container"><code class="language-${lang} hljs">${preCode}</code>${copyBtn}</pre>`
   }
 });
+md.use(latexPlugin)
+md.use(mathjaxPlugin)
 
 // 创建 socket 连接
 const prompt = ref('');
@@ -567,6 +569,19 @@ const connect = function (chat_id, role_id) {
       host = 'ws://' + location.host;
     }
   }
+
+  // 心跳函数
+  const sendHeartbeat = () => {
+    clearTimeout(heartbeatHandle.value)
+    new Promise((resolve, reject) => {
+      if (socket.value !== null) {
+        socket.value.send(JSON.stringify({type: "heartbeat", content: "ping"}))
+      }
+      resolve("success")
+    }).then(() => {
+      heartbeatHandle.value = setTimeout(() => sendHeartbeat(), 5000)
+    });
+  }
   const _socket = new WebSocket(host + `/api/chat/new?session_id=${_sessionId}&role_id=${role_id}&chat_id=${chat_id}&model_id=${modelID.value}&token=${getUserToken()}`);
   _socket.addEventListener('open', () => {
     chatData.value = []; // 初始化聊天数据
@@ -589,15 +604,8 @@ const connect = function (chat_id, role_id) {
     } else { // 加载聊天记录
       loadChatHistory(chat_id);
     }
-
     // 发送心跳消息
-    clearInterval(heartbeatHandle.value)
-    heartbeatHandle.value = setInterval(() => {
-      if (socket.value !== null) {
-        socket.value.send(JSON.stringify({type: "heartbeat", content: "ping"}))
-      }
-    }, 5000);
-
+    sendHeartbeat()
   });
 
   _socket.addEventListener('message', event => {
@@ -717,7 +725,7 @@ const sendMessage = function () {
     type: "prompt",
     id: randString(32),
     icon: loginUser.value.avatar,
-    content: md.render(processContent(prompt.value)),
+    content: md.render(escapeHTML(processContent(prompt.value))),
     created_at: new Date().getTime(),
   });
 
@@ -797,37 +805,6 @@ const loadChatHistory = function (chatId) {
   })
 }
 
-const processContent = (content) => {
-  //process img url
-  const linkRegex = /(https?:\/\/\S+)/g;
-  const links = content.match(linkRegex);
-  if (links) {
-    for (let link of links) {
-      if (isImage(link)) {
-        const index = content.indexOf(link)
-        if (content.substring(index - 1, 2) !== "]") {
-          content = content.replace(link, "\n![](" + link + ")\n")
-        }
-      }
-    }
-  }
-
-  // 处理引用块
-  if (content.indexOf("\n") === -1) {
-    return content
-  }
-
-  const texts = content.split("\n")
-  const lines = []
-  for (let txt of texts) {
-    lines.push(txt)
-    if (txt.startsWith(">")) {
-      lines.push("\n")
-    }
-  }
-  return lines.join("\n")
-}
-
 const stopGenerate = function () {
   showStopGenerate.value = false;
   httpGet("/api/chat/stop?session_id=" + getSessionId()).then(() => {
@@ -846,7 +823,7 @@ const reGenerate = function () {
     icon: loginUser.value.avatar,
     content: md.render(text)
   });
-  socket.value.send(text);
+  socket.value.send(JSON.stringify({type: "chat", content: previousText.value}));
 }
 
 const chatName = ref('')

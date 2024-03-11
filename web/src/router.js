@@ -156,35 +156,32 @@ const routes = [
                 meta: {title: '函数管理'},
                 component: () => import('@/views/admin/Functions.vue'),
             },
+            {
+                path: '/admin/chats',
+                name: 'admin-chats',
+                meta: {title: '对话管理'},
+                component: () => import('@/views/admin/ChatList.vue'),
+            },
         ]
     },
 
-    {
-        path: '/mobile/chat/session',
-        name: 'mobile-chat-session',
-        component: () => import('@/views/mobile/ChatSession.vue'),
-    },
+
     {
         name: 'mobile',
         path: '/mobile',
-        meta: {title: 'ChatPuls-智能助手V3'},
+        meta: {title: 'ChatPlus-智能助手V3'},
         component: () => import('@/views/mobile/Home.vue'),
-        redirect: '/mobile/chat/list',
+        redirect: '/mobile/chat',
         children: [
             {
-                path: '/mobile/chat/list',
-                name: 'mobile-chat-list',
+                path: '/mobile/chat',
+                name: 'mobile-chat',
                 component: () => import('@/views/mobile/ChatList.vue'),
             },
             {
-                path: '/mobile/imageSd',
-                name: 'mobile-imageSd',
-                component: () => import('@/views/mobile/ImageSd.vue'),
-            },
-            {
-                path: '/mobile/apps',
-                name: 'mobile-apps',
-                component: () => import('@/views/mobile/Apps.vue'),
+                path: '/mobile/mj',
+                name: 'mobile-mj',
+                component: () => import('@/views/mobile/ImageMj.vue'),
             },
             {
                 path: '/mobile/profile',
@@ -192,12 +189,23 @@ const routes = [
                 component: () => import('@/views/mobile/Profile.vue'),
             },
             {
-                path: '/mobile/invitation',
-                name: 'mobile-invitation',
-                component: () => import('@/views/mobile/Invitation.vue'),
+                path: '/mobile/img-wall',
+                name: 'mobile-img-wall',
+                component: () => import('@/views/mobile/ImgWall.vue'),
             },
         ]
     },
+    {
+        path: '/mobile/chat/session',
+        name: 'mobile-chat-session',
+        component: () => import('@/views/mobile/ChatSession.vue'),
+    },
+    {
+        path: '/mobile/chat/export',
+        name: 'mobile-chat-export',
+        component: () => import('@/views/mobile/ChatExport.vue'),
+    },
+
     {
         name: 'test',
         path: '/test',

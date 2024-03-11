@@ -4,11 +4,12 @@ import (
 	"chatplus/core/types"
 	"chatplus/utils"
 	"fmt"
-	"github.com/gin-gonic/gin"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gin-gonic/gin"
 )
 
 type LocalStorage struct {
@@ -29,7 +30,7 @@ func (s LocalStorage) PutFile(ctx *gin.Context, name string) (File, error) {
 		return File{}, fmt.Errorf("error with get form: %v", err)
 	}
 
-	path, err := utils.GenUploadPath(s.config.BasePath, file.Filename)
+	path, err := utils.GenUploadPath(s.config.BasePath, file.Filename, false)
 	if err != nil {
 		return File{}, fmt.Errorf("error with generate filename: %s", err.Error())
 	}
@@ -41,10 +42,11 @@ func (s LocalStorage) PutFile(ctx *gin.Context, name string) (File, error) {
 
 	ext := filepath.Ext(file.Filename)
 	return File{
-		Name: file.Filename,
-		URL:  utils.GenUploadUrl(s.config.BasePath, s.config.BaseURL, path),
-		Ext:  ext,
-		Size: file.Size,
+		Name:   file.Filename,
+		ObjKey: path,
+		URL:    utils.GenUploadUrl(s.config.BasePath, s.config.BaseURL, path),
+		Ext:    ext,
+		Size:   file.Size,
 	}, nil
 }
 
@@ -54,7 +56,7 @@ func (s LocalStorage) PutImg(imageURL string, useProxy bool) (string, error) {
 		return "", fmt.Errorf("error with parse image URL: %v", err)
 	}
 	filename := filepath.Base(parse.Path)
-	filePath, err := utils.GenUploadPath(s.config.BasePath, filename)
+	filePath, err := utils.GenUploadPath(s.config.BasePath, filename, true)
 	if err != nil {
 		return "", fmt.Errorf("error with generate image dir: %v", err)
 	}
@@ -72,6 +74,9 @@ func (s LocalStorage) PutImg(imageURL string, useProxy bool) (string, error) {
 }
 
 func (s LocalStorage) Delete(fileURL string) error {
+	if _, err := os.Stat(fileURL); err == nil {
+		return os.Remove(fileURL)
+	}
 	filePath := strings.Replace(fileURL, s.config.BaseURL, s.config.BasePath, 1)
 	return os.Remove(filePath)
 }

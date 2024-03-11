@@ -130,7 +130,7 @@ func (h *ChatHandler) sendChatGLMMessage(
 				if err != nil {
 					logger.Error(err)
 				}
-				historyUserMsg := model.HistoryMessage{
+				historyUserMsg := model.ChatMessage{
 					UserId:     userVo.Id,
 					ChatId:     session.ChatId,
 					RoleId:     role.Id,
@@ -139,6 +139,7 @@ func (h *ChatHandler) sendChatGLMMessage(
 					Content:    template.HTMLEscapeString(prompt),
 					Tokens:     promptToken,
 					UseContext: true,
+					Model:      req.Model,
 				}
 				historyUserMsg.CreatedAt = promptCreatedAt
 				historyUserMsg.UpdatedAt = promptCreatedAt
@@ -151,7 +152,7 @@ func (h *ChatHandler) sendChatGLMMessage(
 				// 计算本次对话消耗的总 token 数量
 				replyToken, _ := utils.CalcTokens(message.Content, req.Model)
 				totalTokens := replyToken + getTotalTokens(req)
-				historyReplyMsg := model.HistoryMessage{
+				historyReplyMsg := model.ChatMessage{
 					UserId:     userVo.Id,
 					ChatId:     session.ChatId,
 					RoleId:     role.Id,
@@ -160,6 +161,7 @@ func (h *ChatHandler) sendChatGLMMessage(
 					Content:    message.Content,
 					Tokens:     totalTokens,
 					UseContext: true,
+					Model:      req.Model,
 				}
 				historyReplyMsg.CreatedAt = replyCreatedAt
 				historyReplyMsg.UpdatedAt = replyCreatedAt
@@ -184,6 +186,7 @@ func (h *ChatHandler) sendChatGLMMessage(
 				} else {
 					chatItem.Title = prompt
 				}
+				chatItem.Model = req.Model
 				h.db.Create(&chatItem)
 			}
 		}

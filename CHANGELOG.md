@@ -1,4 +1,18 @@
 # 更新日志
+## v3.2.7
+* 功能重构：采用 Vant 重构移动页面，新增 MidJourney 功能
+* 功能优化：优化 PC 端 MidJourney 页面布局，新增融图和换脸功能
+* Bug修复：修复 issue [
+  管理界面操作用户存在的两个问题](https://github.com/yangjian102621/chatgpt-plus/issues/117#issuecomment-1909201532)
+* 功能优化：在对话和聊天记录表中新增冗余字段 model，存储对话模型
+* Bug修复：IPhone 手机验证码触摸事件坐标错位 [issue 144](https://github.com/yangjian102621/chatgpt-plus/issues/144)
+* Bug修复：重新生成按钮功能失效问题
+* Bug修复：对话输入HTML标签不显示的问题
+* 功能优化：gpt-4-all/gpts/midjourney-plus 支持第三方平台的 API KEY
+* 功能新增：新增删除文件功能
+* Bug修复：解决 MJ-Plus discord 图片下载失败问题，使用第三方平台中转地址下载
+* 功能新增：后台管理新怎对话查看和检索功能
+
 ## v3.2.6
 * 功能优化：恢复关闭注册系统配置项，管理员可以在后台关闭用户注册，只允许内部添加账号
 * 功能优化：兼用旧版本微信收款消息解析

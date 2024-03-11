@@ -9,13 +9,17 @@ func (t TaskType) String() string {
 
 const (
 	TaskImage     = TaskType("image")
+	TaskBlend     = TaskType("blend")
+	TaskSwapFace  = TaskType("swapFace")
 	TaskUpscale   = TaskType("upscale")
 	TaskVariation = TaskType("variation")
 )
 
 // MjTask MidJourney 任务
 type MjTask struct {
-	Id          int      `json:"id"`
+	Id          uint     `json:"id"`
+	TaskId      string   `json:"task_id"`
+	ImgArr      []string `json:"img_arr"`
 	ChannelId   string   `json:"channel_id"`
 	SessionId   string   `json:"session_id"`
 	Type        TaskType `json:"type"`

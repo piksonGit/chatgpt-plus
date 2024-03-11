@@ -126,7 +126,7 @@ func (h *ChatHandler) sendAzureMessage(
 				if err != nil {
 					logger.Error(err)
 				}
-				historyUserMsg := model.HistoryMessage{
+				historyUserMsg := model.ChatMessage{
 					UserId:     userVo.Id,
 					ChatId:     session.ChatId,
 					RoleId:     role.Id,
@@ -135,6 +135,7 @@ func (h *ChatHandler) sendAzureMessage(
 					Content:    template.HTMLEscapeString(prompt),
 					Tokens:     promptToken,
 					UseContext: true,
+					Model:      req.Model,
 				}
 				historyUserMsg.CreatedAt = promptCreatedAt
 				historyUserMsg.UpdatedAt = promptCreatedAt
@@ -147,7 +148,7 @@ func (h *ChatHandler) sendAzureMessage(
 				totalTokens, _ := utils.CalcTokens(message.Content, req.Model)
 				totalTokens += getTotalTokens(req)
 
-				historyReplyMsg := model.HistoryMessage{
+				historyReplyMsg := model.ChatMessage{
 					UserId:     userVo.Id,
 					ChatId:     session.ChatId,
 					RoleId:     role.Id,
@@ -156,6 +157,7 @@ func (h *ChatHandler) sendAzureMessage(
 					Content:    message.Content,
 					Tokens:     totalTokens,
 					UseContext: true,
+					Model:      req.Model,
 				}
 				historyReplyMsg.CreatedAt = replyCreatedAt
 				historyReplyMsg.UpdatedAt = replyCreatedAt
@@ -181,6 +183,7 @@ func (h *ChatHandler) sendAzureMessage(
 				} else {
 					chatItem.Title = prompt
 				}
+				chatItem.Model = req.Model
 				h.db.Create(&chatItem)
 			}
 		}

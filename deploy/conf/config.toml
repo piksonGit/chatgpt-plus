@@ -1,10 +1,9 @@
 Listen = "0.0.0.0:5678"
 ProxyURL = "" # 如 http://127.0.0.1:7777
-MysqlDns = "root:12345678@tcp(chatgpt-plus-mysql:3306)/chatgpt_plus?charset=utf8&parseTime=True&loc=Local"
+MysqlDns = "root:12345678@tcp(172.22.11.200:3307)/chatgpt_plus?charset=utf8&parseTime=True&loc=Local"
 StaticDir = "./static" # 静态资源的目录
 StaticUrl = "/static" # 静态资源访问 URL
 AesEncryptKey = ""
-ImgCdnURL = ""
 WeChatBot = false
 
 [Session]
@@ -16,9 +15,9 @@ WeChatBot = false
   Password = "admin123" # 如果是生产环境的话，这里管理员的密码记得修改
 
 [Redis] # redis 配置信息
-  Host = "chatgpt-plus-redis"
+  Host = "localhost"
   Port = 6379
-  Password = "12345678"
+  Password = ""
   DB = 0
 
 [ApiConfig] # 微博热搜，今日头条等函数服务 API 配置，此为第三方插件服务，如需使用请联系作者开通
@@ -26,23 +25,16 @@ WeChatBot = false
   AppId = ""
   Token = ""
 
-[SmsConfig] # 阿里云短信服务配置
-  AccessKey = ""
-  AccessSecret = ""
-  Product = "Dysmsapi"
-  Domain = "dysmsapi.aliyuncs.com"
-  Sign = ""
-  CodeTempId = ""
 
-[Sms] # Sms 配置，用于发送短信
+[SMS] # Sms 配置，用于发送短信
    Active = "Ali" # 当前启用的短信服务，默认使用阿里云
-   [Sms.SmsBao]
+   [SMS.Bao]
       Username = ""
       Password = ""
       Domain = "api.smsbao.com"
       Sign = "【极客学长】"
       CodeTemplate = "您的验证码是{code}。5分钟有效，若非本人操作，请忽略本短信。"
-   [Sms.Ali]
+   [SMS.Ali]
       AccessKey = ""
       AccessSecret = ""
       Product = "Dysmsapi"
@@ -54,7 +46,7 @@ WeChatBot = false
    Active = "local" # 默认使用本地文件存储引擎
    [OSS.Local]
      BasePath = "./static/upload" # 本地文件上传根路径
-     BaseURL = "http://localhost:5678/static/upload" # 本地上传文件根 URL 如果是线上，则直接设置为 /static/upload 即可
+     BaseURL = "/static/upload" # 本地上传文件根 URL 如果是线上，则直接设置为 /static/upload 即可
    [OSS.Minio]
      Endpoint = "" # 如 172.22.11.200:9000
      AccessKey = "" # 自己去 Minio 控制台去创建一个 Access Key
@@ -76,13 +68,15 @@ WeChatBot = false
   GuildId = ""
   ChanelId = ""
   UseCDN = false #是否使用反向代理访问，设置为true下面的设置才会生效
-  DiscordAPI = "https://mj.r9it.com:8001" # discord API 反代地址
-  DiscordCDN = "https://mj.r9it.com:8002" # mj 图片反代地址
-  DiscordGateway = "wss://mj.r9it.com:8003" # discord 机器人反代地址
+  DiscordAPI = "" # discord API 反代地址
+  DiscordCDN = "" # mj 图片反代地址
+  DiscordGateway = "" # discord 机器人反代地址
 
 [[MjPlusConfigs]]
   Enabled = false
   ApiURL = "https://api.chatgpt-plus.net" # 目前暂时不支持更改
+  CdnURL = "" # CND 加速的 URL，如果有的话就设置
+  Mode = "fast" # MJ 绘画模式，可选值 relax/fast/turbo
   ApiKey = "sk-xxx"
   NotifyURL = "https://ai.r9it.com/api/mj/notify" # 这里需要改成你的域名
 
@@ -114,9 +108,9 @@ WeChatBot = false
 [HuPiPayConfig]
   Enabled = false
   Name = "wechat"
-  AppId = "201906161477"
-  AppSecret = "7f403199d510fb2c6f0b9f2311800e7c"
-  PayURL = "https://api.xunhupay.com/payment/do.html"
+  AppId = ""
+  AppSecret = ""
+  ApiURL = "https://api.xunhupay.com"
   NotifyURL = "https://ai.r9it.com/api/payment/hupipay/notify"
 
 [SmtpConfig] # 注意，阿里云服务器禁用了25号端口，所以如果需要使用邮件功能，请别用阿里云服务器
@@ -131,5 +125,5 @@ WeChatBot = false
   Name = "wechat" # 请不要改动
   AppId = "" # 商户 ID
   PrivateKey = "" # 秘钥
-  ApiURL = "https://payjs.cn/api/native"
+  ApiURL = "https://payjs.cn"
   NotifyURL = "https://ai.r9it.com/api/payment/payjs/notify" # 异步回调地址，域名改成你自己的

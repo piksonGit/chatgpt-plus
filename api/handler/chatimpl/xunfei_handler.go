@@ -189,7 +189,7 @@ func (h *ChatHandler) sendXunFeiMessage(
 			if err != nil {
 				logger.Error(err)
 			}
-			historyUserMsg := model.HistoryMessage{
+			historyUserMsg := model.ChatMessage{
 				UserId:     userVo.Id,
 				ChatId:     session.ChatId,
 				RoleId:     role.Id,
@@ -198,6 +198,7 @@ func (h *ChatHandler) sendXunFeiMessage(
 				Content:    template.HTMLEscapeString(prompt),
 				Tokens:     promptToken,
 				UseContext: true,
+				Model:      req.Model,
 			}
 			historyUserMsg.CreatedAt = promptCreatedAt
 			historyUserMsg.UpdatedAt = promptCreatedAt
@@ -210,7 +211,7 @@ func (h *ChatHandler) sendXunFeiMessage(
 			// 计算本次对话消耗的总 token 数量
 			replyToken, _ := utils.CalcTokens(message.Content, req.Model)
 			totalTokens := replyToken + getTotalTokens(req)
-			historyReplyMsg := model.HistoryMessage{
+			historyReplyMsg := model.ChatMessage{
 				UserId:     userVo.Id,
 				ChatId:     session.ChatId,
 				RoleId:     role.Id,
@@ -219,6 +220,7 @@ func (h *ChatHandler) sendXunFeiMessage(
 				Content:    message.Content,
 				Tokens:     totalTokens,
 				UseContext: true,
+				Model:      req.Model,
 			}
 			historyReplyMsg.CreatedAt = replyCreatedAt
 			historyReplyMsg.UpdatedAt = replyCreatedAt
@@ -243,6 +245,7 @@ func (h *ChatHandler) sendXunFeiMessage(
 			} else {
 				chatItem.Title = prompt
 			}
+			chatItem.Model = req.Model
 			h.db.Create(&chatItem)
 		}
 	}

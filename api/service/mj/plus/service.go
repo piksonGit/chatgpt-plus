@@ -58,31 +58,42 @@ func (s *Service) Run() {
 		}
 
 		// if it's reference message, check if it's this channel's  message
-		if task.ChannelId != "" && task.ChannelId != s.Name {
-			logger.Debugf("handle other service task, name: %s, channel_id: %s, drop it.", s.Name, task.ChannelId)
-			s.taskQueue.RPush(task)
-			time.Sleep(time.Second)
-			continue
-		}
+		//if task.ChannelId != "" && task.ChannelId != s.Name {
+		//	logger.Debugf("handle other service task, name: %s, channel_id: %s, drop it.", s.Name, task.ChannelId)
+		//	s.taskQueue.RPush(task)
+		//	time.Sleep(time.Second)
+		//	continue
+		//}
 
 		logger.Infof("%s handle a new MidJourney task: %+v", s.Name, task)
 		var res ImageRes
 		switch task.Type {
 		case types.TaskImage:
-			index := strings.Index(task.Prompt, " ")
-			res, err = s.Client.Imagine(task.Prompt[index+1:])
+			res, err = s.Client.Imagine(task)
 			break
 		case types.TaskUpscale:
-			res, err = s.Client.Upscale(task.Index, task.MessageId, task.MessageHash)
+			res, err = s.Client.Upscale(task)
 			break
 		case types.TaskVariation:
-			res, err = s.Client.Variation(task.Index, task.MessageId, task.MessageHash)
+			res, err = s.Client.Variation(task)
+			break
+		case types.TaskBlend:
+			res, err = s.Client.Blend(task)
+			break
+		case types.TaskSwapFace:
+			res, err = s.Client.SwapFace(task)
+			break
 		}
 
+		var job model.MidJourneyJob
+		s.db.Where("id = ?", task.Id).First(&job)
 		if err != nil || (res.Code != 1 && res.Code != 22) {
-			logger.Error("绘画任务执行失败：", err)
+			errMsg := fmt.Sprintf("%v,%s", err, res.Description)
+			logger.Error("绘画任务执行失败：", errMsg)
+			job.Progress = -1
+			job.ErrMsg = errMsg
 			// update the task progress
-			s.db.Model(&model.MidJourneyJob{Id: uint(task.Id)}).UpdateColumn("progress", -1)
+			s.db.Updates(&job)
 			// 任务失败，通知前端
 			s.notifyQueue.RPush(task.UserId)
 			// restore img_call quota
@@ -95,14 +106,12 @@ func (s *Service) Run() {
 		}
 		logger.Infof("任务提交成功：%+v", res)
 		// lock the task until the execute timeout
-		s.taskStartTimes[task.Id] = time.Now()
+		s.taskStartTimes[int(task.Id)] = time.Now()
 		atomic.AddInt32(&s.HandledTaskNum, 1)
 		// 更新任务 ID/频道
-		s.db.Model(&model.MidJourneyJob{}).Where("id = ?", task.Id).UpdateColumns(map[string]interface{}{
-			"task_id":    res.Result,
-			"channel_id": s.Name,
-		})
-
+		job.TaskId = res.Result
+		job.ChannelId = s.Name
+		s.db.Updates(&job)
 	}
 }
 
@@ -142,26 +151,54 @@ type CBReq struct {
 	} `json:"properties"`
 }
 
-func (s *Service) Notify(data CBReq, job model.MidJourneyJob) error {
-
-	job.Progress = utils.IntValue(strings.Replace(data.Progress, "%", "", 1), 0)
-	job.Prompt = data.Properties.FinalPrompt
-	if data.ImageUrl != "" {
-		job.OrgURL = data.ImageUrl
-	}
-	job.UseProxy = true
-	job.MessageId = data.Id
-	logger.Debugf("JOB: %+v", job)
-	res := s.db.Updates(&job)
-	if res.Error != nil {
-		return fmt.Errorf("error with update job: %v", res.Error)
+func (s *Service) Notify(job model.MidJourneyJob) error {
+	task, err := s.Client.QueryTask(job.TaskId)
+	if err != nil {
+		return err
 	}
 
-	if data.Status == "SUCCESS" {
+	// 任务执行失败了
+	if task.FailReason != "" {
+		s.db.Model(&model.MidJourneyJob{Id: job.Id}).UpdateColumns(map[string]interface{}{
+			"progress": -1,
+			"err_msg":  task.FailReason,
+		})
+		return fmt.Errorf("task failed: %v", task.FailReason)
+	}
+
+	if len(task.Buttons) > 0 {
+		job.Hash = GetImageHash(task.Buttons[0].CustomId)
+	}
+	oldProgress := job.Progress
+	job.Progress = utils.IntValue(strings.Replace(task.Progress, "%", "", 1), 0)
+	job.Prompt = task.PromptEn
+	if task.ImageUrl != "" {
+		if s.Client.Config.CdnURL != "" {
+			job.OrgURL = strings.Replace(task.ImageUrl, s.Client.Config.ApiURL, s.Client.Config.CdnURL, 1)
+		} else {
+			job.OrgURL = task.ImageUrl
+		}
+	}
+	job.MessageId = task.Id
+	tx := s.db.Updates(&job)
+	if tx.Error != nil {
+		return fmt.Errorf("error with update database: %v", tx.Error)
+	}
+	if task.Status == "SUCCESS" {
 		// release lock task
 		atomic.AddInt32(&s.HandledTaskNum, -1)
 	}
-
-	s.notifyQueue.RPush(job.UserId)
+	// 通知前端更新任务进度
+	if oldProgress != job.Progress {
+		s.notifyQueue.RPush(job.UserId)
+	}
 	return nil
+}
+
+func GetImageHash(action string) string {
+	split := strings.Split(action, "::")
+	if len(split) > 5 {
+		return split[4]
+	}
+	return split[len(split)-1]
 }

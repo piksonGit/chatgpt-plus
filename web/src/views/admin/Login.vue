@@ -5,7 +5,8 @@
         <div class="header">{{ title }}</div>
         <div class="content">
           <div class="block">
-            <el-input placeholder="请输入用户名" size="large" v-model="username" autocomplete="off">
+            <el-input placeholder="请输入用户名" size="large" v-model="username" autocomplete="off" autofocus
+                      @keyup="keyupHandle">
               <template #prefix>
                 <el-icon>
                   <UserFilled/>
@@ -15,7 +16,8 @@
           </div>
 
           <div class="block">
-            <el-input placeholder="请输入密码" size="large" v-model="password" show-password autocomplete="off">
+            <el-input placeholder="请输入密码" size="large" v-model="password" show-password autocomplete="off"
+                      @keyup="keyupHandle">
               <template #prefix>
                 <el-icon>
                   <Lock/>
@@ -58,13 +60,12 @@ checkAdminSession().then(() => {
   router.push("/admin")
 }).catch(() => {
 })
-onMounted(() => {
-  document.addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') {
-      login();
-    }
-  });
-})
+
+const keyupHandle = (e) => {
+  if (e.key === 'Enter') {
+    login();
+  }
+}
 
 const login = function () {
   if (username.value === '') {

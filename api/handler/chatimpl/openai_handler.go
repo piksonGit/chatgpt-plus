@@ -46,6 +46,8 @@ func (h *ChatHandler) sendOpenAiMessage(
 
 		utils.ReplyMessage(ws, ErrorMsg)
 		utils.ReplyMessage(ws, ErrImg)
+		all, _ := io.ReadAll(response.Body)
+		logger.Error(string(all))
 		return err
 	} else {
 		defer response.Body.Close()
@@ -197,7 +199,7 @@ func (h *ChatHandler) sendOpenAiMessage(
 				if err != nil {
 					logger.Error(err)
 				}
-				historyUserMsg := model.HistoryMessage{
+				historyUserMsg := model.ChatMessage{
 					UserId:     userVo.Id,
 					ChatId:     session.ChatId,
 					RoleId:     role.Id,
@@ -206,6 +208,7 @@ func (h *ChatHandler) sendOpenAiMessage(
 					Content:    template.HTMLEscapeString(prompt),
 					Tokens:     promptToken,
 					UseContext: useContext,
+					Model:      req.Model,
 				}
 				historyUserMsg.CreatedAt = promptCreatedAt
 				historyUserMsg.UpdatedAt = promptCreatedAt
@@ -226,15 +229,16 @@ func (h *ChatHandler) sendOpenAiMessage(
 				}
 				totalTokens += getTotalTokens(req)
 
-				historyReplyMsg := model.HistoryMessage{
+				historyReplyMsg := model.ChatMessage{
 					UserId:     userVo.Id,
 					ChatId:     session.ChatId,
 					RoleId:     role.Id,
 					Type:       types.ReplyMsg,
 					Icon:       role.Icon,
-					Content:    message.Content,
+					Content:    h.extractImgUrl(message.Content),
 					Tokens:     totalTokens,
 					UseContext: useContext,
+					Model:      req.Model,
 				}
 				historyReplyMsg.CreatedAt = replyCreatedAt
 				historyReplyMsg.UpdatedAt = replyCreatedAt
@@ -260,6 +264,7 @@ func (h *ChatHandler) sendOpenAiMessage(
 				} else {
 					chatItem.Title = prompt
 				}
+				chatItem.Model = req.Model
 				h.db.Create(&chatItem)
 			}
 		}

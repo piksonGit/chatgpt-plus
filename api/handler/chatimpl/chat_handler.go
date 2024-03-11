@@ -6,6 +6,7 @@ import (
 	"chatplus/core/types"
 	"chatplus/handler"
 	logger2 "chatplus/logger"
+	"chatplus/service/oss"
 	"chatplus/store/model"
 	"chatplus/store/vo"
 	"chatplus/utils"
@@ -16,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -33,14 +35,16 @@ var logger = logger2.GetLogger()
 
 type ChatHandler struct {
 	handler.BaseHandler
-	db    *gorm.DB
-	redis *redis.Client
+	db            *gorm.DB
+	redis         *redis.Client
+	uploadManager *oss.UploaderManager
 }
 
-func NewChatHandler(app *core.AppServer, db *gorm.DB, redis *redis.Client) *ChatHandler {
+func NewChatHandler(app *core.AppServer, db *gorm.DB, redis *redis.Client, manager *oss.UploaderManager) *ChatHandler {
 	h := ChatHandler{
-		db:    db,
-		redis: redis,
+		db:            db,
+		redis:         redis,
+		uploadManager: manager,
 	}
 	h.App = app
 	return &h
@@ -97,7 +101,7 @@ func (h *ChatHandler) ChatHandle(c *gin.Context) {
 
 	// use old chat data override the chat model and role ID
 	var chat model.ChatItem
-	res = h.db.Where("chat_id=?", chatId).First(&chat)
+	res = h.db.Where("chat_id = ?", chatId).First(&chat)
 	if res.Error == nil {
 		chatModel.Id = chat.ModelId
 		roleId = int(chat.RoleId)
@@ -321,7 +325,7 @@ func (h *ChatHandler) sendMessage(ctx context.Context, session *types.ChatSessio
 
 			// loading recent chat history as chat context
 			if chatConfig.ContextDeep > 0 {
-				var historyMessages []model.HistoryMessage
+				var historyMessages []model.ChatMessage
 				res := h.db.Debug().Where("chat_id = ? and use_context = 1", session.ChatId).Limit(chatConfig.ContextDeep).Order("id desc").Find(&historyMessages)
 				if res.Error == nil {
 					for i := len(historyMessages) - 1; i >= 0; i-- {
@@ -386,7 +390,7 @@ func (h *ChatHandler) Tokens(c *gin.Context) {
 
 	// 如果没有传入 text 字段，则说明是获取当前 reply 总的 token 消耗（带上下文）
 	if data.Text == "" && data.ChatId != "" {
-		var item model.HistoryMessage
+		var item model.ChatMessage
 		userId, _ := c.Get(types.LoginUserID)
 		res := h.db.Where("user_id = ?", userId).Where("chat_id = ?", data.ChatId).Last(&item)
 		if res.Error != nil {
@@ -462,11 +466,7 @@ func (h *ChatHandler) doRequest(ctx context.Context, req types.ApiRequest, platf
 		req.Messages = nil
 		break
 	default:
-		if req.Model == "gpt-4-all" || strings.HasPrefix(req.Model, "gpt-4-gizmo-g-") {
-			apiURL = "https://gpt.bemore.lol/v1/chat/completions"
-		} else {
-			apiURL = apiKey.ApiURL
-		}
+		apiURL = apiKey.ApiURL
 	}
 	// 更新 API KEY 的最后使用时间
 	h.db.Model(apiKey).UpdateColumn("last_used_at", time.Now().Unix())
@@ -507,7 +507,7 @@ func (h *ChatHandler) doRequest(ctx context.Context, req types.ApiRequest, platf
 	} else {
 		client = http.DefaultClient
 	}
-	logger.Debugf("Sending %s request, ApiURL:%s, Password:%s, PROXY: %s, Model: %s", platform, apiURL, apiKey.Value, proxyURL, req.Model)
+	logger.Debugf("Sending %s request, ApiURL:%s, API KEY:%s, PROXY: %s, Model: %s", platform, apiURL, apiKey.Value, proxyURL, req.Model)
 	switch platform {
 	case types.Azure:
 		request.Header.Set("api-key", apiKey.Value)
@@ -549,4 +549,30 @@ func (h *ChatHandler) incUserTokenFee(userId uint, tokens int) {
 		UpdateColumn("total_tokens", gorm.Expr("total_tokens + ?", tokens))
 	h.db.Model(&model.User{}).Where("id = ?", userId).
 		UpdateColumn("tokens", gorm.Expr("tokens + ?", tokens))
+}
+
+// 将AI回复消息中生成的图片链接下载到本地
+func (h *ChatHandler) extractImgUrl(text string) string {
+	pattern := `!\[([^\]]*)]\(([^)]+)\)`
+	re := regexp.MustCompile(pattern)
+	matches := re.FindAllStringSubmatch(text, -1)
+
+	// 下载图片并替换链接地址
+	for _, match := range matches {
+		imageURL := match[2]
+		logger.Debug(imageURL)
+		// 对于相同地址的图片，已经被替换了，就不再重复下载了
+		if !strings.Contains(text, imageURL) {
+			continue
+		}
+
+		newImgURL, err := h.uploadManager.GetUploadHandler().PutImg(imageURL, false)
+		if err != nil {
+			logger.Error("error with download image: ", err)
+			continue
+		}
+
+		text = strings.ReplaceAll(text, imageURL, newImgURL)
+	}
+	return text
 }

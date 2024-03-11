@@ -6,12 +6,14 @@ import (
 	"chatplus/utils"
 	"context"
 	"fmt"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/qiniu/go-sdk/v7/auth/qbox"
 	"github.com/qiniu/go-sdk/v7/storage"
-	"net/url"
-	"path/filepath"
-	"time"
 )
 
 type QinNiuOss struct {
@@ -74,10 +76,11 @@ func (s QinNiuOss) PutFile(ctx *gin.Context, name string) (File, error) {
 	}
 
 	return File{
-		Name: file.Filename,
-		URL:  fmt.Sprintf("%s/%s", s.config.Domain, ret.Key),
-		Ext:  fileExt,
-		Size: file.Size,
+		Name:   file.Filename,
+		ObjKey: key,
+		URL:    fmt.Sprintf("%s/%s", s.config.Domain, ret.Key),
+		Ext:    fileExt,
+		Size:   file.Size,
 	}, nil
 
 }
@@ -97,7 +100,7 @@ func (s QinNiuOss) PutImg(imageURL string, useProxy bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error with parse image URL: %v", err)
 	}
-	fileExt := filepath.Ext(parse.Path)
+	fileExt := utils.GetImgExt(parse.Path)
 	key := fmt.Sprintf("%s/%d%s", s.config.SubDir, time.Now().UnixMicro(), fileExt)
 	ret := storage.PutRet{}
 	extra := storage.PutExtra{}
@@ -110,9 +113,15 @@ func (s QinNiuOss) PutImg(imageURL string, useProxy bool) (string, error) {
 }
 
 func (s QinNiuOss) Delete(fileURL string) error {
-	objectName := filepath.Base(fileURL)
-	key := fmt.Sprintf("%s/%s", s.config.SubDir, objectName)
-	return s.manager.Delete(s.config.Bucket, key)
+	var objectKey string
+	if strings.HasPrefix(fileURL, "http") {
+		filename := filepath.Base(fileURL)
+		objectKey = fmt.Sprintf("%s/%s", s.config.SubDir, filename)
+	} else {
+		objectKey = fileURL
+	}
+
+	return s.manager.Delete(s.config.Bucket, objectKey)
 }
 
 var _ Uploader = QinNiuOss{}
