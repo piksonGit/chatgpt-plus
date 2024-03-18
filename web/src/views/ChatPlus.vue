@@ -116,19 +116,24 @@
               <i class="iconfont icon-export"></i>
               <span>导出会话</span>
             </el-button>
-
-            <el-tooltip class="box-item"
+            <el-popover
+              placement="bottom"
+              trigger="click"
+            >
+              <template #reference>
+                <el-button> 联系客服 </el-button>
+              </template>
+              <img src="https://ai.aixuanfeng.com/images/wx.png" style="width:317px;height:432px">
+            </el-popover>
+            <!-- <el-tooltip class="box-item"
                         effect="dark"
-                        content="部署文档"
                         placement="bottom">
-              <a href="https://ai.r9it.com/docs/install/" target="_blank">
                 <el-button type="primary" circle>
+                  联系客服
                   <i class="iconfont icon-book"></i>
                 </el-button>
-              </a>
-            </el-tooltip>
-
-            <el-tooltip class="box-item"
+            </el-tooltip> -->
+            <!-- <el-tooltip class="box-item"
                         effect="dark"
                         content="项目源码"
                         placement="bottom">
@@ -137,7 +142,7 @@
                   <i class="iconfont icon-github"></i>
                 </el-button>
               </a>
-            </el-tooltip>
+            </el-tooltip> -->
           </div>
         </div>
 

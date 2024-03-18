@@ -1,12 +1,12 @@
 <template>
   <el-container class="file-list-box">
-    <el-tooltip class="box-item" effect="dark" content="打开文件管理中心">
+    <!-- <el-tooltip class="box-item" effect="dark" content="打开文件管理中心">
       <el-button class="file-upload-img" @click="fetchFiles">
         <el-icon>
           <PictureFilled/>
         </el-icon>
       </el-button>
-    </el-tooltip>
+    </el-tooltip> -->
 
     <el-dialog
         v-model="show"
