@@ -119,6 +119,7 @@
             <el-popover
               placement="bottom"
               trigger="click"
+              :width="330"
             >
               <template #reference>
                 <el-button> 联系客服 </el-button>
