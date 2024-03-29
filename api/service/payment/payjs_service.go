@@ -29,16 +29,17 @@ type JPayReq struct {
 	OutTradeNo string `json:"out_trade_no"`
 	Subject    string `json:"body"`
 	NotifyURL  string `json:"notify_url"`
+	ReturnURL  string `json:"callback_url"`
 }
 type JPayReps struct {
-	CodeUrl    string `json:"code_url"`
 	OutTradeNo string `json:"out_trade_no"`
 	OrderId    string `json:"payjs_order_id"`
-	Qrcode     string `json:"qrcode"`
 	ReturnCode int    `json:"return_code"`
 	ReturnMsg  string `json:"return_msg"`
 	Sign       string `json:"Sign"`
 	TotalFee   string `json:"total_fee"`
+	CodeUrl    string `json:"code_url,omitempty"`
+	Qrcode     string `json:"qrcode,omitempty"`
 }
 
 func (r JPayReps) IsOK() bool {
@@ -78,8 +79,14 @@ func (js *PayJS) Pay(param JPayReq) JPayReps {
 	return data
 }
 
+func (js *PayJS) PayH5(p url.Values) string {
+	p.Add("mchid", js.config.AppId)
+	p.Add("sign", js.sign(p))
+	return fmt.Sprintf("%s/api/cashier?%s", js.config.ApiURL, p.Encode())
+}
+
 func (js *PayJS) sign(params url.Values) string {
-	params.Del(`Sign`)
+	params.Del(`sign`)
 	var keys = make([]string, 0, 0)
 	for key := range params {
 		if params.Get(key) != `` {
@@ -109,7 +116,7 @@ func (js *PayJS) Check(tradeNo string) error {
 	apiURL := fmt.Sprintf("%s/api/check", js.config.ApiURL)
 	params := url.Values{}
 	params.Add("payjs_order_id", tradeNo)
-	params.Add("Sign", js.sign(params))
+	params.Add("sign", js.sign(params))
 	data := strings.NewReader(params.Encode())
 	resp, err := http.Post(apiURL, "application/x-www-form-urlencoded", data)
 	defer resp.Body.Close()
@@ -135,6 +142,7 @@ func (js *PayJS) Check(tradeNo string) error {
 	if r.ReturnCode == 1 && r.Status == 1 {
 		return nil
 	} else {
+		logger.Errorf("PayJs 支付验证响应：%s", string(body))
 		return errors.New("order not paid")
 	}
 }

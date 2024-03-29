@@ -163,7 +163,7 @@
           </el-form>
         </div>
       </div>
-      <div class="task-list-box">
+      <div class="task-list-box" @scrollend="handleScrollEnd">
         <div class="task-list-inner" :style="{ height: listBoxHeight + 'px' }">
           <div class="extra-params">
             <el-form>
@@ -171,27 +171,6 @@
                 <el-tab-pane label="文生图(可选)" name="image">
                   <div class="text">图生图：以某张图片为底稿参考来创作绘画，生成类似风格或类型图像，支持 PNG 和 JPG 格式图片；
                   </div>
-                  <div class="param-line pt">
-                    <el-form-item label="">
-                      <template #default>
-                        <div class="form-item-inner flex-row items-center">
-                          <el-input v-model="params.img" size="small" placeholder="请输入图片地址或者上传图片"
-                                    style="width: 300px;"/>
-                          <el-icon @click="params.img = ''" title="清空图片">
-                            <DeleteFilled/>
-                          </el-icon>
-                          <el-tooltip effect="light"
-                                      content="垫图：以某张图片为底稿参考来创作绘画 <br/> 支持 PNG 和 JPG 格式图片"
-                                      raw-content placement="right">
-                            <el-icon>
-                              <InfoFilled/>
-                            </el-icon>
-                          </el-tooltip>
-                        </div>
-                      </template>
-                    </el-form-item>
-                  </div>
-
                   <div class="param-line">
                     <div class="img-inline">
                       <div class="img-list-box">
@@ -239,36 +218,13 @@
                             </el-icon>
                           </el-tooltip>
                         </div>
-                        <div>
-                          <el-button type="primary" @click="translatePrompt(false)" :disabled="loading">
-                            <el-icon style="margin-right: 6px;font-size: 18px;">
-                              <Refresh/>
-                            </el-icon>
-                            翻译
-                          </el-button>
-
-                          <el-tooltip
-                              class="box-item"
-                              effect="light"
-                              raw-content
-                              content="使用 AI 翻译并重写提示词，<br/>增加更多细节，风格等描述"
-                              placement="top-end"
-                          >
-                            <el-button type="success" @click="rewritePrompt" :disabled="loading">
-                              <el-icon style="margin-right: 6px;font-size: 18px;">
-                                <Refresh/>
-                              </el-icon>
-                              翻译并重写
-                            </el-button>
-                          </el-tooltip>
-                        </div>
                       </div>
                     </div>
 
                     <div class="param-line pt">
                       <el-input v-model="params.prompt" :autosize="{ minRows: 4, maxRows: 6 }" type="textarea"
                                 ref="promptRef"
-                                placeholder="这里输入你的英文咒语，例如：A chinese girl walking in the middle of a cobblestone street"/>
+                                placeholder="请在此输入绘画提示词，系统会自动翻译中文提示词，高手请直接输入英文提示词"/>
                     </div>
 
                     <div class="param-line pt">
@@ -281,19 +237,13 @@
                             </el-icon>
                           </el-tooltip>
                         </div>
-                        <el-button type="primary" @click="translatePrompt(true)" :disabled="loading">
-                          <el-icon style="margin-right: 6px;font-size: 18px;">
-                            <Refresh/>
-                          </el-icon>
-                          翻译
-                        </el-button>
                       </div>
                     </div>
 
                     <div class="param-line pt">
                       <el-input v-model="params.neg_prompt" :autosize="{ minRows: 4, maxRows: 6 }" type="textarea"
                                 ref="promptRef"
-                                placeholder="这里输入你不希望出现在图片上的内容，元素"/>
+                                placeholder="请在此输入你不希望出现在图片上的内容，系统会自动翻译中文提示词"/>
                     </div>
                   </div>
                 </el-tab-pane>
@@ -340,7 +290,7 @@
               <div class="submit-btn">
                 <el-button color="#47fff1" :dark="false" @click="generate" round>立即生成</el-button>
                 <div class="text-info">
-                  <el-tag type="success">绘图可用额度：{{ imgCalls }}</el-tag>
+                  <el-tag type="success">当前可用算力：{{ power }}</el-tag>
                 </div>
               </div>
             </el-form>
@@ -391,88 +341,93 @@
             </div>
 
             <h2>创作记录</h2>
-            <div class="finish-job-list">
-              <ItemList :items="finishedJobs" v-if="finishedJobs.length > 0" :width="240" :gap="16">
-                <template #default="scope">
-                  <div class="job-item">
-                    <el-image
-                        :src="scope.item['thumb_url']"
-                        :class="scope.item['can_opt'] ? '' : 'upscale'" :zoom-rate="1.2"
-                        :preview-src-list="[scope.item['img_url']]" fit="cover" :initial-index="scope.index"
-                        loading="lazy" v-if="scope.item.progress > 0">
-                      <template #placeholder>
-                        <div class="image-slot">
-                          正在加载图片
-                        </div>
-                      </template>
+            <div class="finish-job-list" v-loading="loading" element-loading-background="rgba(255, 255, 255, 0.5)">
+              <div v-if="finishedJobs.length > 0">
+                <ItemList :items="finishedJobs" :width="240" :gap="16">
+                  <template #default="scope">
+                    <div class="job-item">
+                      <el-image
+                          :src="scope.item['thumb_url']"
+                          :class="scope.item['can_opt'] ? '' : 'upscale'" :zoom-rate="1.2"
+                          :preview-src-list="[scope.item['img_url']]" fit="cover" :initial-index="scope.index"
+                          loading="lazy" v-if="scope.item.progress > 0">
+                        <template #placeholder>
+                          <div class="image-slot">
+                            正在加载图片
+                          </div>
+                        </template>
 
-                      <template #error>
-                        <div class="image-slot" v-if="scope.item['img_url'] === ''">
-                          <i class="iconfont icon-loading"></i>
-                          <span>正在下载图片</span>
-                        </div>
-                        <div class="image-slot" v-else>
-                          <el-icon>
-                            <Picture/>
-                          </el-icon>
-                        </div>
-                      </template>
-                    </el-image>
+                        <template #error>
+                          <div class="image-slot" v-if="scope.item['img_url'] === ''">
+                            <i class="iconfont icon-loading"></i>
+                            <span>正在下载图片</span>
+                          </div>
+                          <div class="image-slot" v-else>
+                            <el-icon>
+                              <Picture/>
+                            </el-icon>
+                          </div>
+                        </template>
+                      </el-image>
 
-                    <div class="opt" v-if="scope.item['can_opt']">
-                      <div class="opt-line">
-                        <ul>
-                          <li><a @click="upscale(1, scope.item)">U1</a></li>
-                          <li><a @click="upscale(2, scope.item)">U2</a></li>
-                          <li><a @click="upscale(3, scope.item)">U3</a></li>
-                          <li><a @click="upscale(4, scope.item)">U4</a></li>
-                          <li class="show-prompt">
+                      <div class="opt" v-if="scope.item['can_opt']">
+                        <div class="opt-line">
+                          <ul>
+                            <li><a @click="upscale(1, scope.item)">U1</a></li>
+                            <li><a @click="upscale(2, scope.item)">U2</a></li>
+                            <li><a @click="upscale(3, scope.item)">U3</a></li>
+                            <li><a @click="upscale(4, scope.item)">U4</a></li>
+                            <li class="show-prompt">
 
-                            <el-popover placement="left" title="提示词" :width="240" trigger="hover">
-                              <template #reference>
-                                <el-icon>
-                                  <ChromeFilled/>
-                                </el-icon>
-                              </template>
-
-                              <template #default>
-                                <div class="mj-list-item-prompt">
-                                  <span>{{ scope.item.prompt }}</span>
-                                  <el-icon class="copy-prompt"
-                                           :data-clipboard-text="scope.item.prompt">
-                                    <DocumentCopy/>
+                              <el-popover placement="left" title="提示词" :width="240" trigger="hover">
+                                <template #reference>
+                                  <el-icon>
+                                    <ChromeFilled/>
                                   </el-icon>
-                                </div>
-                              </template>
-                            </el-popover>
-                          </li>
-                        </ul>
+                                </template>
+
+                                <template #default>
+                                  <div class="mj-list-item-prompt">
+                                    <span>{{ scope.item.prompt }}</span>
+                                    <el-icon class="copy-prompt-mj"
+                                             :data-clipboard-text="scope.item.prompt">
+                                      <DocumentCopy/>
+                                    </el-icon>
+                                  </div>
+                                </template>
+                              </el-popover>
+                            </li>
+                          </ul>
+                        </div>
+
+                        <div class="opt-line">
+                          <ul>
+                            <li><a @click="variation(1, scope.item)">V1</a></li>
+                            <li><a @click="variation(2, scope.item)">V2</a></li>
+                            <li><a @click="variation(3, scope.item)">V3</a></li>
+                            <li><a @click="variation(4, scope.item)">V4</a></li>
+                          </ul>
+                        </div>
                       </div>
 
-                      <div class="opt-line">
-                        <ul>
-                          <li><a @click="variation(1, scope.item)">V1</a></li>
-                          <li><a @click="variation(2, scope.item)">V2</a></li>
-                          <li><a @click="variation(3, scope.item)">V3</a></li>
-                          <li><a @click="variation(4, scope.item)">V4</a></li>
-                        </ul>
+                      <div class="remove">
+                        <el-button type="danger" :icon="Delete" @click="removeImage(scope.item)" circle/>
+                        <el-button type="warning" v-if="scope.item.publish" @click="publishImage(scope.item, false)"
+                                   circle>
+                          <i class="iconfont icon-cancel-share"></i>
+                        </el-button>
+                        <el-button type="success" v-else @click="publishImage(scope.item, true)" circle>
+                          <i class="iconfont icon-share-bold"></i>
+                        </el-button>
                       </div>
                     </div>
-
-                    <div class="remove">
-                      <el-button type="danger" :icon="Delete" @click="removeImage(scope.item)" circle/>
-                      <el-button type="warning" v-if="scope.item.publish" @click="publishImage(scope.item, false)"
-                                 circle>
-                        <i class="iconfont icon-cancel-share"></i>
-                      </el-button>
-                      <el-button type="success" v-else @click="publishImage(scope.item, true)" circle>
-                        <i class="iconfont icon-share-bold"></i>
-                      </el-button>
-                    </div>
-                  </div>
-                </template>
-              </ItemList>
-
+                  </template>
+                </ItemList>
+                <div class="no-more-data" v-if="isOver">
+                  <span>没有更多数据了</span>
+                  <i class="iconfont icon-face"></i>
+                </div>
+              </div>
               <el-empty :image-size="100" v-else/>
             </div> <!-- end finish job list-->
           </div>
@@ -481,21 +436,13 @@
       </div><!-- end task list box -->
     </div>
 
+    <login-dialog :show="showLoginDialog" @hide="showLoginDialog =  false" @success="initData"/>
   </div>
 </template>
 
 <script setup>
-import {onMounted, ref} from "vue"
-import {
-  ChromeFilled,
-  Delete,
-  DeleteFilled,
-  DocumentCopy,
-  InfoFilled,
-  Picture,
-  Plus,
-  Refresh
-} from "@element-plus/icons-vue";
+import {nextTick, onMounted, onUnmounted, ref} from "vue"
+import {ChromeFilled, Delete, DocumentCopy, InfoFilled, Picture, Plus} from "@element-plus/icons-vue";
 import Compressor from "compressorjs";
 import {httpGet, httpPost} from "@/utils/http";
 import {ElMessage, ElMessageBox, ElNotification} from "element-plus";
@@ -504,10 +451,13 @@ import Clipboard from "clipboard";
 import {checkSession} from "@/action/session";
 import {useRouter} from "vue-router";
 import {getSessionId} from "@/store/session";
-import {isMobile, removeArrayItem} from "@/utils/libs";
+import {removeArrayItem} from "@/utils/libs";
+import LoginDialog from "@/components/LoginDialog.vue";
 
 const listBoxHeight = ref(window.innerHeight - 40)
 const mjBoxHeight = ref(window.innerHeight - 150)
+const showLoginDialog = ref(false)
+
 window.onresize = () => {
   listBoxHeight.value = window.innerHeight - 40
   mjBoxHeight.value = window.innerHeight - 150
@@ -555,7 +505,8 @@ const options = [
   },
 ]
 
-const params = ref({
+const router = useRouter()
+const initParams = {
   task_type: "image",
   rate: rates[0].value,
   model: models[0].value,
@@ -565,11 +516,12 @@ const params = ref({
   img_arr: [],
   raw: false,
   weight: 0.25,
-  prompt: "",
+  prompt: router.currentRoute.value.params["prompt"] ?? "",
   neg_prompt: "",
   tile: false,
   quality: 0
-})
+}
+const params = ref(initParams)
 
 const imgList = ref([])
 
@@ -577,46 +529,11 @@ const activeName = ref('image')
 
 const runningJobs = ref([])
 const finishedJobs = ref([])
-const router = useRouter()
 
 const socket = ref(null)
-const imgCalls = ref(0)
-const loading = ref(false)
+const power = ref(0)
 const userId = ref(0)
-
-if (isMobile()) {
-  router.replace("/mobile/mj")
-}
-
-const rewritePrompt = () => {
-  loading.value = true
-  httpPost("/api/prompt/rewrite", {"prompt": params.value.prompt}).then(res => {
-    params.value.prompt = res.data
-    loading.value = false
-  }).catch(e => {
-    loading.value = false
-    ElMessage.error("翻译失败：" + e.message)
-  })
-}
-
-const translatePrompt = (negative) => {
-  loading.value = true
-  let prompt = params.value.prompt
-  if (negative) {
-    prompt = params.value.neg_prompt
-  }
-  httpPost("/api/prompt/translate", {"prompt": prompt}).then(res => {
-    if (negative) {
-      params.value.neg_prompt = res.data
-    } else {
-      params.value.prompt = res.data
-    }
-    loading.value = false
-  }).catch(e => {
-    loading.value = false
-    ElMessage.error("翻译失败：" + e.message)
-  })
-}
+const isLogin = ref(false)
 
 const heartbeatHandle = ref(null)
 const connect = () => {
@@ -652,42 +569,68 @@ const connect = () => {
 
   _socket.addEventListener('message', event => {
     if (event.data instanceof Blob) {
-      fetchRunningJobs(userId.value)
-      fetchFinishJobs(userId.value)
+      fetchRunningJobs()
+      isOver.value = false
+      page.value = 1
+      fetchFinishJobs(page.value)
     }
   });
 
   _socket.addEventListener('close', () => {
-    connect()
+    if (socket.value !== null) {
+      connect()
+    }
   });
 }
 
+const clipboard = ref(null)
 onMounted(() => {
-  checkSession().then(user => {
-    imgCalls.value = user['img_calls']
-    userId.value = user.id
-
-    fetchRunningJobs(userId.value)
-    fetchFinishJobs(userId.value)
-    connect()
-
-  }).catch(() => {
-    router.push('/login')
-  });
-
-  const clipboard = new Clipboard('.copy-prompt');
-  clipboard.on('success', () => {
+  initData()
+  clipboard.value = new Clipboard('.copy-prompt-mj');
+  clipboard.value.on('success', () => {
     ElMessage.success("复制成功！");
   })
 
-  clipboard.on('error', () => {
+  clipboard.value.on('error', () => {
     ElMessage.error('复制失败！');
   })
 })
 
+onUnmounted(() => {
+  socket.value = null
+})
+
+// 初始化数据
+const initData = () => {
+  checkSession().then(user => {
+    power.value = user['power']
+    userId.value = user.id
+    isLogin.value = true
+
+    fetchRunningJobs()
+    fetchFinishJobs(1)
+    connect()
+  }).catch(() => {
+
+  });
+}
+
+onUnmounted(() => {
+  clipboard.value.destroy()
+})
+
+const mjPower = ref(1)
+const mjActionPower = ref(1)
+httpGet("/api/config/get?key=system").then(res => {
+  mjPower.value = res.data["mj_power"]
+  mjActionPower.value = res.data["mj_action_power"]
+}).catch(e => {
+  ElMessage.error("获取系统配置失败：" + e.message)
+})
+
 // 获取运行中的任务
-const fetchRunningJobs = (userId) => {
-  httpGet(`/api/mj/jobs?status=0&user_id=${userId}`).then(res => {
+const fetchRunningJobs = () => {
+  httpGet(`/api/mj/jobs?status=0`).then(res => {
     const jobs = res.data
     const _jobs = []
     for (let i = 0; i < jobs.length; i++) {
@@ -697,8 +640,13 @@ const fetchRunningJobs = (userId) => {
           dangerouslyUseHTMLString: true,
           message: `任务ID：${jobs[i]['task_id']}<br />原因：${jobs[i]['err_msg']}`,
           type: 'error',
+          duration: 0,
         })
-        imgCalls.value += 1
+        if (jobs[i].type === 'image') {
+          power.value += mjPower.value
+        } else {
+          power.value += mjActionPower.value
+        }
         continue
       }
       _jobs.push(jobs[i])
@@ -709,9 +657,23 @@ const fetchRunningJobs = (userId) => {
   })
 }
 
-const fetchFinishJobs = (userId) => {
+
+const handleScrollEnd = () => {
+  if (isOver.value === true) {
+    return
+  }
+  page.value += 1
+  fetchFinishJobs(page.value)
+};
+
+const page = ref(1)
+const pageSize = ref(15)
+const isOver = ref(false)
+const loading = ref(false)
+const fetchFinishJobs = (page) => {
+  loading.value = true
   // 获取已完成的任务
-  httpGet(`/api/mj/jobs?status=1&user_id=${userId}`).then(res => {
+  httpGet(`/api/mj/jobs?status=1&page=${page}&page_size=${pageSize.value}`).then(res => {
     const jobs = res.data
     for (let i = 0; i < jobs.length; i++) {
       if (jobs[i]['use_proxy']) {
@@ -728,8 +690,17 @@ const fetchFinishJobs = (userId) => {
         jobs[i]['can_opt'] = true
       }
     }
-    finishedJobs.value = jobs
+    if (jobs.length < pageSize.value) {
+      isOver.value = true
+    }
+    if (page === 1) {
+      finishedJobs.value = jobs
+    } else {
+      finishedJobs.value = finishedJobs.value.concat(jobs)
+    }
+    nextTick(() => loading.value = false)
   }).catch(e => {
+    loading.value = false
     ElMessage.error("获取任务失败：" + e.message)
   })
 }
@@ -745,6 +716,11 @@ const changeModel = (item) => {
 
 // 图片上传
 const uploadImg = (file) => {
+  if (!isLogin.value) {
+    showLoginDialog.value = true
+    return
+  }
+
   // 压缩图片并上传
   new Compressor(file.file, {
     quality: 0.6,
@@ -768,6 +744,11 @@ const uploadImg = (file) => {
 // 创建绘图任务
 const promptRef = ref(null)
 const generate = () => {
+  if (!isLogin.value) {
+    showLoginDialog.value = true
+    return
+  }
+
   if (params.value.prompt === '' && params.value.task_type === "image") {
     promptRef.value.focus()
     return ElMessage.error("请输入绘画提示词！")
@@ -782,7 +763,8 @@ const generate = () => {
   params.value.img_arr = imgList.value
   httpPost("/api/mj/image", params.value).then(() => {
     ElMessage.success("绘画任务推送成功，请耐心等待任务执行...")
-    imgCalls.value -= 1
+    power.value -= mjPower.value
+    params.value = initParams
   }).catch(e => {
     ElMessage.error("任务推送失败：" + e.message)
   })
@@ -808,7 +790,7 @@ const send = (url, index, item) => {
     prompt: item.prompt,
   }).then(() => {
     ElMessage.success("任务推送成功，请耐心等待任务执行...")
-    imgCalls.value -= 1
+    power.value -= mjActionPower.value
   }).catch(e => {
     ElMessage.error("任务推送失败：" + e.message)
   })

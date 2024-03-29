@@ -51,10 +51,10 @@ const routes = [
                 component: () => import('@/views/Invitation.vue'),
             },
             {
-                name: 'knowledge',
-                path: '/knowledge',
-                meta: {title: '我的知识库'},
-                component: () => import('@/views/Knowledge.vue'),
+                name: 'powerLog',
+                path: '/powerLog',
+                meta: {title: '消费日志'},
+                component: () => import('@/views/PowerLog.vue'),
             },
         ]
     },
@@ -162,6 +162,18 @@ const routes = [
                 meta: {title: '对话管理'},
                 component: () => import('@/views/admin/ChatList.vue'),
             },
+            {
+                path: '/admin/powerLog',
+                name: 'admin-power-log',
+                meta: {title: '算力日志'},
+                component: () => import('@/views/admin/PowerLog.vue'),
+            },
+            {
+                path: '/admin/manger',
+                name: 'admin-manger',
+                meta: {title: '管理员'},
+                component: () => import('@/views/admin/Manager.vue'),
+            }
         ]
     },
 

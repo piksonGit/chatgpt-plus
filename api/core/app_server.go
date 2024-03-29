@@ -28,10 +28,9 @@ type AppServer struct {
 	Debug        bool
 	Config       *types.AppConfig
 	Engine       *gin.Engine
-	ChatContexts *types.LMap[string, []interface{}] // 聊天上下文 Map [chatId] => []Message
+	ChatContexts *types.LMap[string, []types.Message] // 聊天上下文 Map [chatId] => []Message
 
-	ChatConfig *types.ChatConfig   // chat config cache
-	SysConfig  *types.SystemConfig // system config cache
+	SysConfig *types.SystemConfig // system config cache
 
 	// 保存 Websocket 会话 UserId, 每个 UserId 只能连接一次
 	// 防止第三方直接连接 socket 调用 OpenAI API
@@ -47,7 +46,7 @@ func NewServer(appConfig *types.AppConfig) *AppServer {
 		Debug:         false,
 		Config:        appConfig,
 		Engine:        gin.Default(),
-		ChatContexts:  types.NewLMap[string, []interface{}](),
+		ChatContexts:  types.NewLMap[string, []types.Message](),
 		ChatSession:   types.NewLMap[string, *types.ChatSession](),
 		ChatClients:   types.NewLMap[string, *types.WsClient](),
 		ReqCancelFunc: types.NewLMap[string, context.CancelFunc](),
@@ -69,23 +68,13 @@ func (s *AppServer) Init(debug bool, client *redis.Client) {
 }
 
 func (s *AppServer) Run(db *gorm.DB) error {
-	// load chat config from database
-	var chatConfig model.Config
-	res := db.Where("marker", "chat").First(&chatConfig)
-	if res.Error != nil {
-		return res.Error
-	}
-	err := utils.JsonDecode(chatConfig.Config, &s.ChatConfig)
-	if err != nil {
-		return err
-	}
 	// load system configs
 	var sysConfig model.Config
-	res = db.Where("marker", "system").First(&sysConfig)
+	res := db.Where("marker", "system").First(&sysConfig)
 	if res.Error != nil {
 		return res.Error
 	}
-	err = utils.JsonDecode(sysConfig.Config, &s.SysConfig)
+	err := utils.JsonDecode(sysConfig.Config, &s.SysConfig)
 	if err != nil {
 		return err
 	}
@@ -143,79 +132,101 @@ func corsMiddleware() gin.HandlerFunc {
 // 用户授权验证
 func authorizeMiddleware(s *AppServer, client *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.URL.Path == "/api/user/login" ||
-			c.Request.URL.Path == "/api/user/resetPass" ||
-			c.Request.URL.Path == "/api/admin/login" ||
-			c.Request.URL.Path == "/api/user/register" ||
-			c.Request.URL.Path == "/api/chat/history" ||
-			c.Request.URL.Path == "/api/chat/detail" ||
-			c.Request.URL.Path == "/api/role/list" ||
-			c.Request.URL.Path == "/api/mj/jobs" ||
-			c.Request.URL.Path == "/api/mj/client" ||
-			c.Request.URL.Path == "/api/mj/notify" ||
-			c.Request.URL.Path == "/api/invite/hits" ||
-			c.Request.URL.Path == "/api/sd/jobs" ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/test") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/function/") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/sms/") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/captcha/") ||
-			strings.HasPrefix(c.Request.URL.Path, "/api/payment/") ||
-			strings.HasPrefix(c.Request.URL.Path, "/static/") ||
-			c.Request.URL.Path == "/api/admin/config/get" {
-			c.Next()
-			return
-		}
-
 		var tokenString string
-		if strings.Contains(c.Request.URL.Path, "/api/admin/") { // 后台管理 API
+		isAdminApi := strings.Contains(c.Request.URL.Path, "/api/admin/")
+		if isAdminApi { // 后台管理 API
 			tokenString = c.GetHeader(types.AdminAuthHeader)
 		} else if c.Request.URL.Path == "/api/chat/new" {
 			tokenString = c.Query("token")
 		} else {
 			tokenString = c.GetHeader(types.UserAuthHeader)
 		}
+
 		if tokenString == "" {
-			resp.ERROR(c, "You should put Authorization in request headers")
-			c.Abort()
-			return
+			if needLogin(c) {
+				resp.ERROR(c, "You should put Authorization in request headers")
+				c.Abort()
+				return
+			} else { // 直接放行
+				c.Next()
+				return
+			}
 		}
 
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok && needLogin(c) {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
+			if isAdminApi {
+				return []byte(s.Config.AdminSession.SecretKey), nil
+			} else {
+				return []byte(s.Config.Session.SecretKey), nil
+			}
 
-			return []byte(s.Config.Session.SecretKey), nil
 		})
 
-		if err != nil {
+		if err != nil && needLogin(c) {
 			resp.NotAuth(c, fmt.Sprintf("Error with parse auth token: %v", err))
 			c.Abort()
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || !token.Valid {
+		if !ok || !token.Valid && needLogin(c) {
 			resp.NotAuth(c, "Token is invalid")
 			c.Abort()
 			return
 		}
 
 		expr := utils.IntValue(utils.InterfaceToString(claims["expired"]), 0)
-		if expr > 0 && int64(expr) < time.Now().Unix() {
+		if expr > 0 && int64(expr) < time.Now().Unix() && needLogin(c) {
 			resp.NotAuth(c, "Token is expired")
 			c.Abort()
 			return
 		}
 
 		key := fmt.Sprintf("users/%v", claims["user_id"])
-		if _, err := client.Get(context.Background(), key).Result(); err != nil {
+		if isAdminApi {
+			key = fmt.Sprintf("admin/%v", claims["user_id"])
+		}
+		if _, err := client.Get(context.Background(), key).Result(); err != nil && needLogin(c) {
 			resp.NotAuth(c, "Token is not found in redis")
 			c.Abort()
 			return
 		}
 		c.Set(types.LoginUserID, claims["user_id"])
 	}
+}
+
+func needLogin(c *gin.Context) bool {
+	if c.Request.URL.Path == "/api/user/login" ||
+		c.Request.URL.Path == "/api/user/resetPass" ||
+		c.Request.URL.Path == "/api/admin/login" ||
+		c.Request.URL.Path == "/api/admin/login/captcha" ||
+		c.Request.URL.Path == "/api/user/register" ||
+		c.Request.URL.Path == "/api/chat/history" ||
+		c.Request.URL.Path == "/api/chat/detail" ||
+		c.Request.URL.Path == "/api/chat/list" ||
+		c.Request.URL.Path == "/api/role/list" ||
+		c.Request.URL.Path == "/api/model/list" ||
+		c.Request.URL.Path == "/api/mj/imgWall" ||
+		c.Request.URL.Path == "/api/mj/client" ||
+		c.Request.URL.Path == "/api/mj/notify" ||
+		c.Request.URL.Path == "/api/invite/hits" ||
+		c.Request.URL.Path == "/api/sd/imgWall" ||
+		c.Request.URL.Path == "/api/sd/client" ||
+		c.Request.URL.Path == "/api/config/get" ||
+		c.Request.URL.Path == "/api/product/list" ||
+		c.Request.URL.Path == "/api/menu/list" ||
+		strings.HasPrefix(c.Request.URL.Path, "/api/test") ||
+		strings.HasPrefix(c.Request.URL.Path, "/api/function/") ||
+		strings.HasPrefix(c.Request.URL.Path, "/api/sms/") ||
+		strings.HasPrefix(c.Request.URL.Path, "/api/captcha/") ||
+		strings.HasPrefix(c.Request.URL.Path, "/api/payment/") ||
+		strings.HasPrefix(c.Request.URL.Path, "/static/") {
+		return false
+	}
+	return true
 }
 
 // 统一参数处理

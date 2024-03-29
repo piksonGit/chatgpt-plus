@@ -125,6 +125,8 @@ func main() {
 		fx.Provide(handler.NewPaymentHandler),
 		fx.Provide(handler.NewOrderHandler),
 		fx.Provide(handler.NewProductHandler),
+		fx.Provide(handler.NewConfigHandler),
+		fx.Provide(handler.NewPowerLogHandler),
 
 		fx.Provide(admin.NewConfigHandler),
 		fx.Provide(admin.NewAdminHandler),
@@ -137,6 +139,7 @@ func main() {
 		fx.Provide(admin.NewProductHandler),
 		fx.Provide(admin.NewOrderHandler),
 		fx.Provide(admin.NewChatHandler),
+		fx.Provide(admin.NewPowerLogHandler),
 
 		// 创建服务
 		fx.Provide(sms.NewSendServiceManager),
@@ -172,6 +175,12 @@ func main() {
 
 		// Stable Diffusion 机器人
 		fx.Provide(sd.NewServicePool),
+		fx.Invoke(func(pool *sd.ServicePool) {
+			if pool.HasAvailableService() {
+				pool.CheckTaskNotify()
+				pool.CheckTaskStatus()
+			}
+		}),
 
 		fx.Provide(payment.NewAlipayService),
 		fx.Provide(payment.NewHuPiPay),
@@ -229,6 +238,8 @@ func main() {
 			group := s.Engine.Group("/api/captcha/")
 			group.GET("get", h.Get)
 			group.POST("check", h.Check)
+			group.GET("slide/get", h.SlideGet)
+			group.POST("slide/check", h.SlideCheck)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *handler.RewardHandler) {
 			group := s.Engine.Group("/api/reward/")
@@ -241,16 +252,22 @@ func main() {
 			group.POST("upscale", h.Upscale)
 			group.POST("variation", h.Variation)
 			group.GET("jobs", h.JobList)
+			group.GET("imgWall", h.ImgWall)
 			group.POST("remove", h.Remove)
-			group.POST("notify", h.Notify)
 			group.POST("publish", h.Publish)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *handler.SdJobHandler) {
 			group := s.Engine.Group("/api/sd")
+			group.Any("client", h.Client)
 			group.POST("image", h.Image)
 			group.GET("jobs", h.JobList)
+			group.GET("imgWall", h.ImgWall)
 			group.POST("remove", h.Remove)
 			group.POST("publish", h.Publish)
+		}),
+		fx.Invoke(func(s *core.AppServer, h *handler.ConfigHandler) {
+			group := s.Engine.Group("/api/config/")
+			group.GET("get", h.Get)
 		}),
 
 		// 管理后台控制器
@@ -264,13 +281,18 @@ func main() {
 			group.POST("login", h.Login)
 			group.GET("logout", h.Logout)
 			group.GET("session", h.Session)
+			group.GET("list", h.List)
+			group.POST("save", h.Save)
+			group.POST("enable", h.Enable)
+			group.GET("remove", h.Remove)
+			group.POST("resetPass", h.ResetPass)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *admin.ApiKeyHandler) {
 			group := s.Engine.Group("/api/admin/apikey/")
 			group.POST("save", h.Save)
 			group.GET("list", h.List)
 			group.POST("set", h.Set)
-			group.GET("remove", h.Remove)
+			group.POST("remove", h.Remove)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *admin.UserHandler) {
 			group := s.Engine.Group("/api/admin/user/")
@@ -286,12 +308,12 @@ func main() {
 			group.POST("save", h.Save)
 			group.POST("sort", h.Sort)
 			group.POST("set", h.Set)
-			group.GET("remove", h.Remove)
+			group.POST("remove", h.Remove)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *admin.RewardHandler) {
 			group := s.Engine.Group("/api/admin/reward/")
 			group.GET("list", h.List)
-			group.GET("remove", h.Remove)
+			group.POST("remove", h.Remove)
 		}),
 		fx.Invoke(func(s *core.AppServer, h *admin.DashboardHandler) {
 			group := s.Engine.Group("/api/admin/dashboard/")
@@ -315,6 +337,7 @@ func main() {
 			group.GET("payWays", h.GetPayWays)
 			group.POST("query", h.OrderQuery)
 			group.POST("qrcode", h.PayQrcode)
+			group.POST("mobile", h.Mobile)
 			group.POST("alipay/notify", h.AlipayNotify)
 			group.POST("hupipay/notify", h.HuPiPayNotify)
 			group.POST("payjs/notify", h.PayJsNotify)
@@ -349,13 +372,6 @@ func main() {
 			group.GET("hits", h.Hits)
 		}),
 
-		fx.Provide(handler.NewPromptHandler),
-		fx.Invoke(func(s *core.AppServer, h *handler.PromptHandler) {
-			group := s.Engine.Group("/api/prompt/")
-			group.POST("rewrite", h.Rewrite)
-			group.POST("translate", h.Translate)
-		}),
-
 		fx.Provide(admin.NewFunctionHandler),
 		fx.Invoke(func(s *core.AppServer, h *admin.FunctionHandler) {
 			group := s.Engine.Group("/api/admin/function/")
@@ -364,6 +380,18 @@ func main() {
 			group.GET("list", h.List)
 			group.GET("remove", h.Remove)
 			group.GET("token", h.GenToken)
+		}),
+
+		// 验证码
+		fx.Provide(admin.NewCaptchaHandler),
+		fx.Invoke(func(s *core.AppServer, h *admin.CaptchaHandler) {
+			group := s.Engine.Group("/api/admin/login/")
+			group.GET("captcha", h.GetCaptcha)
+		}),
+
+		fx.Provide(admin.NewUploadHandler),
+		fx.Invoke(func(s *core.AppServer, h *admin.UploadHandler) {
+			s.Engine.POST("/api/admin/upload", h.Upload)
 		}),
 
 		fx.Provide(handler.NewFunctionHandler),
@@ -381,19 +409,33 @@ func main() {
 			group.GET("remove", h.RemoveChat)
 			group.GET("message/remove", h.RemoveMessage)
 		}),
-		fx.Provide(handler.NewTestHandler),
-		fx.Invoke(func(s *core.AppServer, h *handler.TestHandler) {
-			s.Engine.GET("/api/test", h.Test)
-			s.Engine.POST("/api/test/mj", h.Mj)
+		fx.Invoke(func(s *core.AppServer, h *handler.PowerLogHandler) {
+			group := s.Engine.Group("/api/powerLog/")
+			group.POST("list", h.List)
+		}),
+		fx.Invoke(func(s *core.AppServer, h *admin.PowerLogHandler) {
+			group := s.Engine.Group("/api/admin/powerLog/")
+			group.POST("list", h.List)
+		}),
+		fx.Provide(admin.NewMenuHandler),
+		fx.Invoke(func(s *core.AppServer, h *admin.MenuHandler) {
+			group := s.Engine.Group("/api/admin/menu/")
+			group.POST("save", h.Save)
+			group.GET("list", h.List)
+			group.POST("enable", h.Enable)
+			group.POST("sort", h.Sort)
+			group.GET("remove", h.Remove)
+		}),
+		fx.Provide(handler.NewMenuHandler),
+		fx.Invoke(func(s *core.AppServer, h *handler.MenuHandler) {
+			group := s.Engine.Group("/api/menu/")
+			group.GET("list", h.List)
 		}),
 		fx.Invoke(func(s *core.AppServer, db *gorm.DB) {
 			err := s.Run(db)
 			if err != nil {
 				log.Fatal(err)
 			}
-		}),
-		fx.Invoke(func(h *chatimpl.ChatHandler) {
-			h.Init()
 		}),
 		// 注册生命周期回调函数
 		fx.Invoke(func(lifecycle fx.Lifecycle, lc *AppLifecycle) {

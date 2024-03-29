@@ -9,6 +9,7 @@ import (
 	"chatplus/utils"
 	"chatplus/utils/resp"
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -16,17 +17,19 @@ import (
 
 type UserHandler struct {
 	handler.BaseHandler
-	db *gorm.DB
 }
 
 func NewUserHandler(app *core.AppServer, db *gorm.DB) *UserHandler {
-	h := UserHandler{db: db}
-	h.App = app
-	return &h
+	return &UserHandler{BaseHandler: handler.BaseHandler{App: app, DB: db}}
 }
 
 // List 用户列表
 func (h *UserHandler) List(c *gin.Context) {
+	if err := utils.CheckPermission(c, h.DB); err != nil {
+		resp.NotPermission(c)
+		return
+	}
+
 	page := h.GetInt(c, "page", 1)
 	pageSize := h.GetInt(c, "page_size", 20)
 	username := h.GetTrim(c, "username")
@@ -36,7 +39,7 @@ func (h *UserHandler) List(c *gin.Context) {
 	var users = make([]vo.User, 0)
 	var total int64
 
-	session := h.db.Session(&gorm.Session{})
+	session := h.DB.Session(&gorm.Session{})
 	if username != "" {
 		session = session.Where("username LIKE ?", "%"+username+"%")
 	}
@@ -66,13 +69,12 @@ func (h *UserHandler) Save(c *gin.Context) {
 		Id          uint     `json:"id"`
 		Password    string   `json:"password"`
 		Username    string   `json:"username"`
-		Calls       int      `json:"calls"`
-		ImgCalls    int      `json:"img_calls"`
 		ChatRoles   []string `json:"chat_roles"`
-		ChatModels  []string `json:"chat_models"`
+		ChatModels  []int    `json:"chat_models"`
 		ExpiredTime string   `json:"expired_time"`
 		Status      bool     `json:"status"`
 		Vip         bool     `json:"vip"`
+		Power       int      `json:"power"`
 	}
 	if err := c.ShouldBindJSON(&data); err != nil {
 		resp.ERROR(c, types.InvalidArgs)
@@ -82,18 +84,45 @@ func (h *UserHandler) Save(c *gin.Context) {
 	var res *gorm.DB
 	var userVo vo.User
 	if data.Id > 0 { // 更新
-		user.Id = data.Id
-		// 此处需要用 map 更新，用结构体无法更新 0 值
-		res = h.db.Model(&user).Updates(map[string]interface{}{
-			"username":         data.Username,
-			"calls":            data.Calls,
-			"img_calls":        data.ImgCalls,
-			"status":           data.Status,
-			"vip":              data.Vip,
-			"chat_roles_json":  utils.JsonEncode(data.ChatRoles),
-			"chat_models_json": utils.JsonEncode(data.ChatModels),
-			"expired_time":     utils.Str2stamp(data.ExpiredTime),
-		})
+		res = h.DB.Where("id", data.Id).First(&user)
+		if res.Error != nil {
+			resp.ERROR(c, "user not found")
+			return
+		}
+		var oldPower = user.Power
+		user.Username = data.Username
+		user.Status = data.Status
+		user.Vip = data.Vip
+		user.Power = data.Power
+		user.ChatRoles = utils.JsonEncode(data.ChatRoles)
+		user.ChatModels = utils.JsonEncode(data.ChatModels)
+		user.ExpiredTime = utils.Str2stamp(data.ExpiredTime)
+
+		res = h.DB.Select("username", "status", "vip", "power", "chat_roles_json", "chat_models_json", "expired_time").Updates(&user)
+		if res.Error != nil {
+			resp.ERROR(c, "更新数据库失败！")
+			return
+		}
+		// 记录算力日志
+		if oldPower != user.Power {
+			mark := types.PowerAdd
+			amount := user.Power - oldPower
+			if oldPower > user.Power {
+				mark = types.PowerSub
+				amount = oldPower - user.Power
+			}
+			h.DB.Create(&model.PowerLog{
+				UserId:    user.Id,
+				Username:  user.Username,
+				Type:      types.PowerGift,
+				Amount:    amount,
+				Balance:   user.Power,
+				Mark:      mark,
+				Model:     "管理员",
+				Remark:    fmt.Sprintf("后台管理员强制修改用户算力，修改前：%d,修改后:%d, 管理员ID：%d", oldPower, user.Power, h.GetLoginUserId(c)),
+				CreatedAt: time.Now(),
+			})
+		}
 	} else {
 		salt := utils.RandString(8)
 		u := model.User{
@@ -102,21 +131,13 @@ func (h *UserHandler) Save(c *gin.Context) {
 			Password:    utils.GenPassword(data.Password, salt),
 			Avatar:      "/images/avatar/user.png",
 			Salt:        salt,
+			Power:       data.Power,
 			Status:      true,
 			ChatRoles:   utils.JsonEncode(data.ChatRoles),
 			ChatModels:  utils.JsonEncode(data.ChatModels),
 			ExpiredTime: utils.Str2stamp(data.ExpiredTime),
-			ChatConfig: utils.JsonEncode(types.UserChatConfig{
-				ApiKeys: map[types.Platform]string{
-					types.OpenAI:  "",
-					types.Azure:   "",
-					types.ChatGLM: "",
-				},
-			}),
-			Calls:    data.Calls,
-			ImgCalls: data.ImgCalls,
 		}
-		res = h.db.Create(&u)
+		res = h.DB.Create(&u)
 		_ = utils.CopyObject(u, &userVo)
 		userVo.Id = u.Id
 		userVo.CreatedAt = u.CreatedAt.Unix()
@@ -143,7 +164,7 @@ func (h *UserHandler) ResetPass(c *gin.Context) {
 	}
 
 	var user model.User
-	res := h.db.First(&user, data.Id)
+	res := h.DB.First(&user, data.Id)
 	if res.Error != nil {
 		resp.ERROR(c, "No user found")
 		return
@@ -151,7 +172,7 @@ func (h *UserHandler) ResetPass(c *gin.Context) {
 
 	password := utils.GenPassword(data.Password, user.Salt)
 	user.Password = password
-	res = h.db.Updates(&user)
+	res = h.DB.Updates(&user)
 	if res.Error != nil {
 		resp.ERROR(c)
 	} else {
@@ -161,36 +182,32 @@ func (h *UserHandler) ResetPass(c *gin.Context) {
 
 func (h *UserHandler) Remove(c *gin.Context) {
 	id := h.GetInt(c, "id", 0)
-	if id > 0 {
-		tx := h.db.Begin()
-		res := h.db.Where("id = ?", id).Delete(&model.User{})
-		if res.Error != nil {
-			resp.ERROR(c, "删除失败")
-			return
-		}
-		// 删除聊天记录
-		res = h.db.Where("user_id = ?", id).Delete(&model.ChatItem{})
-		if res.Error != nil {
-			tx.Rollback()
-			resp.ERROR(c, "删除失败")
-			return
-		}
-		// 删除聊天历史记录
-		res = h.db.Where("user_id = ?", id).Delete(&model.ChatMessage{})
-		if res.Error != nil {
-			tx.Rollback()
-			resp.ERROR(c, "删除失败")
-			return
-		}
-		// 删除登录日志
-		res = h.db.Where("user_id = ?", id).Delete(&model.UserLoginLog{})
-		if res.Error != nil {
-			tx.Rollback()
-			resp.ERROR(c, "删除失败")
-			return
-		}
-		tx.Commit()
+	if id <= 0 {
+		resp.ERROR(c, types.InvalidArgs)
+		return
 	}
+	// 删除用户
+	res := h.DB.Where("id = ?", id).Delete(&model.User{})
+	if res.Error != nil {
+		resp.ERROR(c, "删除失败")
+		return
+	}
+
+	// 删除聊天记录
+	h.DB.Where("user_id = ?", id).Delete(&model.ChatItem{})
+	// 删除聊天历史记录
+	h.DB.Where("user_id = ?", id).Delete(&model.ChatMessage{})
+	// 删除登录日志
+	h.DB.Where("user_id = ?", id).Delete(&model.UserLoginLog{})
+	// 删除算力日志
+	h.DB.Where("user_id = ?", id).Delete(&model.PowerLog{})
+	// 删除众筹日志
+	h.DB.Where("user_id = ?", id).Delete(&model.Reward{})
+	// 删除绘图任务
+	h.DB.Where("user_id = ?", id).Delete(&model.MidJourneyJob{})
+	h.DB.Where("user_id = ?", id).Delete(&model.SdJob{})
+	//  删除订单
+	h.DB.Where("user_id = ?", id).Delete(&model.Order{})
 	resp.SUCCESS(c)
 }
 
@@ -198,10 +215,10 @@ func (h *UserHandler) LoginLog(c *gin.Context) {
 	page := h.GetInt(c, "page", 1)
 	pageSize := h.GetInt(c, "page_size", 20)
 	var total int64
-	h.db.Model(&model.UserLoginLog{}).Count(&total)
+	h.DB.Model(&model.UserLoginLog{}).Count(&total)
 	offset := (page - 1) * pageSize
 	var items []model.UserLoginLog
-	res := h.db.Offset(offset).Limit(pageSize).Order("id DESC").Find(&items)
+	res := h.DB.Offset(offset).Limit(pageSize).Order("id DESC").Find(&items)
 	if res.Error != nil {
 		resp.ERROR(c, "获取数据失败")
 		return

@@ -17,17 +17,12 @@
         </el-table-column>
         <el-table-column prop="subject" label="产品名称"/>
         <el-table-column prop="amount" label="订单金额"/>
-        <el-table-column label="对话次数">
+        <el-table-column label="订单算力">
           <template #default="scope">
-            <span>{{ scope.row.remark?.calls }}</span>
+            <span>{{ scope.row.remark?.power }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="绘图次数">
-          <template #default="scope">
-            <span>{{ scope.row.remark?.img_calls ?? 0 }}</span>
-          </template>
-        </el-table-column>
-
+        <el-table-column prop="pay_way" label="支付方式"/>
         <el-table-column label="支付时间">
           <template #default="scope">
             <span v-if="scope.row['pay_time']">{{ dateFormat(scope.row['pay_time']) }}</span>
@@ -61,7 +56,7 @@ import Clipboard from "clipboard";
 const items = ref([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(12)
 const loading = ref(true)
 
 onMounted(() => {

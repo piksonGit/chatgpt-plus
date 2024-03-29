@@ -11,6 +11,7 @@ import (
 	"embed"
 	"encoding/base64"
 	"fmt"
+	"github.com/shopspring/decimal"
 	"math"
 	"net/http"
 	"net/url"
@@ -34,7 +35,6 @@ type PaymentHandler struct {
 	huPiPayService *payment.HuPiPayService
 	js             *payment.PayJS
 	snowflake      *service.Snowflake
-	db             *gorm.DB
 	fs             embed.FS
 	lock           sync.Mutex
 }
@@ -44,20 +44,21 @@ func NewPaymentHandler(
 	alipayService *payment.AlipayService,
 	huPiPayService *payment.HuPiPayService,
 	js *payment.PayJS,
-	snowflake *service.Snowflake,
 	db *gorm.DB,
+	snowflake *service.Snowflake,
 	fs embed.FS) *PaymentHandler {
-	h := PaymentHandler{
+	return &PaymentHandler{
 		alipayService:  alipayService,
 		huPiPayService: huPiPayService,
 		js:             js,
 		snowflake:      snowflake,
 		fs:             fs,
-		db:             db,
 		lock:           sync.Mutex{},
+		BaseHandler: BaseHandler{
+			App: server,
+			DB:  db,
+		},
 	}
-	h.App = server
-	return &h
 }
 
 func (h *PaymentHandler) DoPay(c *gin.Context) {
@@ -70,7 +71,7 @@ func (h *PaymentHandler) DoPay(c *gin.Context) {
 	}
 
 	var order model.Order
-	res := h.db.Where("order_no = ?", orderNo).First(&order)
+	res := h.DB.Where("order_no = ?", orderNo).First(&order)
 	if res.Error != nil {
 		resp.ERROR(c, "Order not found")
 		return
@@ -83,7 +84,7 @@ func (h *PaymentHandler) DoPay(c *gin.Context) {
 	}
 
 	// 更新扫码状态
-	h.db.Model(&order).UpdateColumn("status", types.OrderScanned)
+	h.DB.Model(&order).UpdateColumn("status", types.OrderScanned)
 	if payWay == "alipay" { // 支付宝
 		// 生成支付链接
 		notifyURL := h.App.Config.AlipayConfig.NotifyURL
@@ -129,7 +130,7 @@ func (h *PaymentHandler) OrderQuery(c *gin.Context) {
 	}
 
 	var order model.Order
-	res := h.db.Where("order_no = ?", data.OrderNo).First(&order)
+	res := h.DB.Where("order_no = ?", data.OrderNo).First(&order)
 	if res.Error != nil {
 		resp.ERROR(c, "Order not found")
 		return
@@ -144,7 +145,7 @@ func (h *PaymentHandler) OrderQuery(c *gin.Context) {
 	for {
 		time.Sleep(time.Second)
 		var item model.Order
-		h.db.Where("order_no = ?", data.OrderNo).First(&item)
+		h.DB.Where("order_no = ?", data.OrderNo).First(&item)
 		if counter >= 15 || item.Status == types.OrderPaidSuccess || item.Status != order.Status {
 			order.Status = item.Status
 			break
@@ -168,7 +169,7 @@ func (h *PaymentHandler) PayQrcode(c *gin.Context) {
 	}
 
 	var product model.Product
-	res := h.db.First(&product, data.ProductId)
+	res := h.DB.First(&product, data.ProductId)
 	if res.Error != nil {
 		resp.ERROR(c, "Product not found")
 		return
@@ -180,7 +181,7 @@ func (h *PaymentHandler) PayQrcode(c *gin.Context) {
 		return
 	}
 	var user model.User
-	res = h.db.First(&user, data.UserId)
+	res = h.DB.First(&user, data.UserId)
 	if res.Error != nil {
 		resp.ERROR(c, "Invalid user ID")
 		return
@@ -202,24 +203,25 @@ func (h *PaymentHandler) PayQrcode(c *gin.Context) {
 	// 创建订单
 	remark := types.OrderRemark{
 		Days:     product.Days,
-		Calls:    product.Calls,
-		ImgCalls: product.ImgCalls,
+		Power:    product.Power,
 		Name:     product.Name,
 		Price:    product.Price,
 		Discount: product.Discount,
 	}
+
+	amount, _ := decimal.NewFromFloat(product.Price).Sub(decimal.NewFromFloat(product.Discount)).Float64()
 	order := model.Order{
 		UserId:    user.Id,
 		Username:  user.Username,
 		ProductId: product.Id,
 		OrderNo:   orderNo,
 		Subject:   product.Name,
-		Amount:    product.Price - product.Discount,
+		Amount:    amount,
 		Status:    types.OrderNotPaid,
 		PayWay:    payWay,
 		Remark:    utils.JsonEncode(remark),
 	}
-	res = h.db.Create(&order)
+	res = h.DB.Create(&order)
 	if res.Error != nil || res.RowsAffected == 0 {
 		resp.ERROR(c, "error with create order: "+res.Error.Error())
 		return
@@ -275,10 +277,121 @@ func (h *PaymentHandler) PayQrcode(c *gin.Context) {
 	resp.SUCCESS(c, gin.H{"order_no": orderNo, "image": fmt.Sprintf("data:image/jpg;base64, %s", imgDataBase64), "url": imageURL})
 }
 
+// Mobile 移动端支付
+func (h *PaymentHandler) Mobile(c *gin.Context) {
+	var data struct {
+		PayWay    string `json:"pay_way"` // 支付方式
+		ProductId uint   `json:"product_id"`
+		UserId    int    `json:"user_id"`
+	}
+	if err := c.ShouldBindJSON(&data); err != nil {
+		resp.ERROR(c, types.InvalidArgs)
+		return
+	}
+
+	var product model.Product
+	res := h.DB.First(&product, data.ProductId)
+	if res.Error != nil {
+		resp.ERROR(c, "Product not found")
+		return
+	}
+
+	orderNo, err := h.snowflake.Next(false)
+	if err != nil {
+		resp.ERROR(c, "error with generate trade no: "+err.Error())
+		return
+	}
+	var user model.User
+	res = h.DB.First(&user, data.UserId)
+	if res.Error != nil {
+		resp.ERROR(c, "Invalid user ID")
+		return
+	}
+
+	amount, _ := decimal.NewFromFloat(product.Price).Sub(decimal.NewFromFloat(product.Discount)).Float64()
+	var payWay string
+	var notifyURL, returnURL string
+	var payURL string
+	switch data.PayWay {
+	case "hupi":
+		payWay = PayWayXunHu
+		notifyURL = h.App.Config.HuPiPayConfig.NotifyURL
+		returnURL = h.App.Config.HuPiPayConfig.ReturnURL
+		params := payment.HuPiPayReq{
+			Version:      "1.1",
+			TradeOrderId: orderNo,
+			TotalFee:     fmt.Sprintf("%f", amount),
+			Title:        product.Name,
+			NotifyURL:    notifyURL,
+			ReturnURL:    returnURL,
+			CallbackURL:  returnURL,
+			WapName:      "极客学长",
+		}
+		r, err := h.huPiPayService.Pay(params)
+		if err != nil {
+			logger.Error("error with generating Pay URL: ", err.Error())
+			resp.ERROR(c, "error with generating Pay URL: "+err.Error())
+			return
+		}
+		payURL = r.URL
+	case "payjs":
+		payWay = PayWayJs
+		notifyURL = h.App.Config.JPayConfig.NotifyURL
+		returnURL = h.App.Config.JPayConfig.ReturnURL
+		totalFee := decimal.NewFromFloat(product.Price).Sub(decimal.NewFromFloat(product.Discount)).Mul(decimal.NewFromInt(100)).IntPart()
+		params := url.Values{}
+		params.Add("total_fee", fmt.Sprintf("%d", totalFee))
+		params.Add("out_trade_no", orderNo)
+		params.Add("body", product.Name)
+		params.Add("notify_url", notifyURL)
+		params.Add("auto", "0")
+		payURL = h.js.PayH5(params)
+	case "alipay":
+		payWay = PayWayAlipay
+		notifyURL = h.App.Config.AlipayConfig.NotifyURL
+		returnURL = h.App.Config.AlipayConfig.ReturnURL
+		payURL, err = h.alipayService.PayUrlMobile(orderNo, notifyURL, returnURL, fmt.Sprintf("%.2f", amount), product.Name)
+		if err != nil {
+			resp.ERROR(c, "error with generating Pay URL: "+err.Error())
+			return
+		}
+	default:
+		resp.ERROR(c, "Unsupported pay way: "+data.PayWay)
+		return
+	}
+	// 创建订单
+	remark := types.OrderRemark{
+		Days:     product.Days,
+		Power:    product.Power,
+		Name:     product.Name,
+		Price:    product.Price,
+		Discount: product.Discount,
+	}
+
+	order := model.Order{
+		UserId:    user.Id,
+		Username:  user.Username,
+		ProductId: product.Id,
+		OrderNo:   orderNo,
+		Subject:   product.Name,
+		Amount:    amount,
+		Status:    types.OrderNotPaid,
+		PayWay:    payWay,
+		Remark:    utils.JsonEncode(remark),
+	}
+	res = h.DB.Create(&order)
+	if res.Error != nil || res.RowsAffected == 0 {
+		resp.ERROR(c, "error with create order: "+res.Error.Error())
+		return
+	}
+
+	resp.SUCCESS(c, payURL)
+}
+
 // 异步通知回调公共逻辑
 func (h *PaymentHandler) notify(orderNo string, tradeNo string) error {
 	var order model.Order
-	res := h.db.Where("order_no = ?", orderNo).First(&order)
+	res := h.DB.Where("order_no = ?", orderNo).First(&order)
 	if res.Error != nil {
 		err := fmt.Errorf("error with fetch order: %v", res.Error)
 		logger.Error(err)
@@ -294,7 +407,7 @@ func (h *PaymentHandler) notify(orderNo string, tradeNo string) error {
 	}
 
 	var user model.User
-	res = h.db.First(&user, order.UserId)
+	res = h.DB.First(&user, order.UserId)
 	if res.Error != nil {
 		err := fmt.Errorf("error with fetch user info: %v", res.Error)
 		logger.Error(err)
@@ -309,29 +422,33 @@ func (h *PaymentHandler) notify(orderNo string, tradeNo string) error {
 		return err
 	}
 
+	var opt string
+	var power int
 	if user.Vip { // 已经是 VIP 用户
 		if remark.Days > 0 { // 只延期 VIP，不增加调用次数
 			user.ExpiredTime = time.Unix(user.ExpiredTime, 0).AddDate(0, 0, remark.Days).Unix()
 		} else { // 充值点卡，直接增加次数即可
-			user.Calls += remark.Calls
-			user.ImgCalls += remark.ImgCalls
+			user.Power += remark.Power
+			opt = "点卡充值"
+			power = remark.Power
 		}
 
-	} else { // 非 VIP 用户
-		if remark.Days > 0 { // vip 套餐：days > 0, calls == 0
+	} else {                 // 非 VIP 用户
+		if remark.Days > 0 { // vip 套餐：days > 0, power == 0
 			user.ExpiredTime = time.Now().AddDate(0, 0, remark.Days).Unix()
-			user.Calls += h.App.SysConfig.VipMonthCalls
-			user.ImgCalls += h.App.SysConfig.VipMonthImgCalls
+			user.Power += h.App.SysConfig.VipMonthPower
 			user.Vip = true
-
+			opt = "VIP充值"
+			power = h.App.SysConfig.VipMonthPower
 		} else { //点卡：days == 0, calls > 0
-			user.Calls += remark.Calls
-			user.ImgCalls += remark.ImgCalls
+			user.Power += remark.Power
+			opt = "点卡充值"
+			power = remark.Power
 		}
 	}
 
 	// 更新用户信息
-	res = h.db.Updates(&user)
+	res = h.DB.Updates(&user)
 	if res.Error != nil {
 		err := fmt.Errorf("error with update user info: %v", res.Error)
 		logger.Error(err)
@@ -342,7 +459,7 @@ func (h *PaymentHandler) notify(orderNo string, tradeNo string) error {
 	order.PayTime = time.Now().Unix()
 	order.Status = types.OrderPaidSuccess
 	order.TradeNo = tradeNo
-	res = h.db.Updates(&order)
+	res = h.DB.Updates(&order)
 	if res.Error != nil {
 		err := fmt.Errorf("error with update order info: %v", res.Error)
 		logger.Error(err)
@@ -350,7 +467,23 @@ func (h *PaymentHandler) notify(orderNo string, tradeNo string) error {
 	}
 
 	// 更新产品销量
-	h.db.Model(&model.Product{}).Where("id = ?", order.ProductId).UpdateColumn("sales", gorm.Expr("sales + ?", 1))
+	h.DB.Model(&model.Product{}).Where("id = ?", order.ProductId).UpdateColumn("sales", gorm.Expr("sales + ?", 1))
+
+	// 记录算力充值日志
+	if opt != "" {
+		h.DB.Create(&model.PowerLog{
+			UserId:    user.Id,
+			Username:  user.Username,
+			Type:      types.PowerRecharge,
+			Amount:    power,
+			Balance:   user.Power,
+			Mark:      types.PowerAdd,
+			Model:     order.PayWay,
+			Remark:    fmt.Sprintf("%s，金额：%f，订单号：%s", opt, order.Amount, order.OrderNo),
+			CreatedAt: time.Now(),
+		})
+	}
+
 	return nil
 }
 

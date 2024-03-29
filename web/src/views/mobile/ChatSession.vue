@@ -103,8 +103,8 @@
 </template>
 
 <script setup>
-import {nextTick, onMounted, ref} from "vue";
-import {showNotify, showToast} from "vant";
+import {nextTick, onMounted, onUnmounted, ref} from "vue";
+import {showImagePreview, showNotify, showToast} from "vant";
 import {onBeforeRouteLeave, useRouter} from "vue-router";
 import {dateFormat, processContent, randString, renderInputText, UUID} from "@/utils/libs";
 import {getChatConfig} from "@/store/chat";
@@ -145,6 +145,10 @@ onMounted(() => {
   clipboard.on('error', () => {
     showNotify({type: 'danger', message: '复制失败', duration: 2000})
   })
+})
+
+onUnmounted(() => {
+  socket.value = null
 })
 
 const chatData = ref([])
@@ -326,6 +330,18 @@ const connect = function (chat_id, role_id) {
               hl.highlightElement(block)
             })
             scrollListBox()
+
+            const items = document.querySelectorAll('.message-line')
+            const imgs = items[items.length - 1].querySelectorAll('img')
+            for (let i = 0; i < imgs.length; i++) {
+              if (!imgs[i].src) {
+                continue
+              }
+              imgs[i].addEventListener('click', (e) => {
+                e.stopPropagation()
+                showImagePreview([imgs[i].src]);
+              })
+            }
           })
         }
 
@@ -335,12 +351,11 @@ const connect = function (chat_id, role_id) {
   });
 
   _socket.addEventListener('close', () => {
-    if (activelyClose.value) { // 忽略主动关闭
+    if (activelyClose.value || socket.value === null) { // 忽略主动关闭
       return;
     }
     // 停止发送消息
     canSend.value = true;
-    socket.value = null;
     // 重连
     checkSession().then(() => {
       connect(chat_id, role_id)

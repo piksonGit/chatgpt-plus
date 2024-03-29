@@ -1,6 +1,6 @@
 <template>
   <div class="user-info" id="user-info">
-    <el-form v-if="user.id" :model="user" label-width="150px">
+    <el-form :model="user" label-width="150px">
       <el-row>
         <el-upload
             class="avatar-uploader"
@@ -29,17 +29,8 @@
           <el-image v-if="user.vip" :src="vipImg" style="height: 25px;margin-left: 10px"/>
         </el-tooltip>
       </el-form-item>
-      <el-form-item label="剩余对话次数">
-        <el-tag>{{ user['calls'] }}</el-tag>
-      </el-form-item>
-      <el-form-item label="剩余绘图次数">
-        <el-tag>{{ user['img_calls'] }}</el-tag>
-      </el-form-item>
-      <el-form-item label="本月消耗电量">
-        <el-tag type="info">{{ user['tokens'] }}</el-tag>
-      </el-form-item>
-      <el-form-item label="累计消耗电量">
-        <el-tag type="info">{{ user['total_tokens'] }}</el-tag>
+      <el-form-item label="剩余算力">
+        <el-tag>{{ user['power'] }}</el-tag>
       </el-form-item>
       <el-form-item label="会员到期时间" v-if="user['expired_time']  > 0">
         <el-tag type="danger">{{ dateFormat(user['expired_time']) }}</el-tag>
@@ -63,12 +54,11 @@ import {checkSession} from "@/action/session";
 
 const user = ref({
   vip: false,
-  username: '',
-  nickname: '',
-  avatar: '',
-  mobile: '',
-  calls: 0,
-  tokens: 0,
+  username: '演示数据',
+  nickname: '演示数据',
+  avatar: '/images/vip.png',
+  mobile: '演示数据',
+  power: 99999,
 })
 const vipImg = ref("/images/vip.png")
 

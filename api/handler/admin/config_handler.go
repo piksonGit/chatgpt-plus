@@ -14,19 +14,20 @@ import (
 
 type ConfigHandler struct {
 	handler.BaseHandler
-	db *gorm.DB
 }
 
 func NewConfigHandler(app *core.AppServer, db *gorm.DB) *ConfigHandler {
-	h := ConfigHandler{db: db}
-	h.App = app
-	return &h
+	return &ConfigHandler{BaseHandler: handler.BaseHandler{App: app, DB: db}}
 }
 
 func (h *ConfigHandler) Update(c *gin.Context) {
 	var data struct {
-		Key    string                 `json:"key"`
-		Config map[string]interface{} `json:"config"`
+		Key    string `json:"key"`
+		Config struct {
+			types.SystemConfig
+			Content string `json:"content,omitempty"`
+			Updated bool   `json:"updated,omitempty"`
+		} `json:"config"`
 	}
 
 	if err := c.ShouldBindJSON(&data); err != nil {
@@ -36,7 +37,7 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 
 	value := utils.JsonEncode(&data.Config)
 	config := model.Config{Key: data.Key, Config: value}
-	res := h.db.FirstOrCreate(&config, model.Config{Key: data.Key})
+	res := h.DB.FirstOrCreate(&config, model.Config{Key: data.Key})
 	if res.Error != nil {
 		resp.ERROR(c, res.Error.Error())
 		return
@@ -44,7 +45,7 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 
 	if config.Id > 0 {
 		config.Config = value
-		res := h.db.Updates(&config)
+		res := h.DB.Updates(&config)
 		if res.Error != nil {
 			resp.ERROR(c, res.Error.Error())
 			return
@@ -52,12 +53,10 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 
 		// update config cache for AppServer
 		var cfg model.Config
-		h.db.Where("marker", data.Key).First(&cfg)
+		h.DB.Where("marker", data.Key).First(&cfg)
 		var err error
 		if data.Key == "system" {
 			err = utils.JsonDecode(cfg.Config, &h.App.SysConfig)
-		} else if data.Key == "chat" {
-			err = utils.JsonDecode(cfg.Config, &h.App.ChatConfig)
 		}
 		if err != nil {
 			resp.ERROR(c, "Failed to update config cache: "+err.Error())
@@ -71,20 +70,25 @@ func (h *ConfigHandler) Update(c *gin.Context) {
 
 // Get 获取指定的系统配置
 func (h *ConfigHandler) Get(c *gin.Context) {
+	if err := utils.CheckPermission(c, h.DB); err != nil {
+		resp.NotPermission(c)
+		return
+	}
+
 	key := c.Query("key")
 	var config model.Config
-	res := h.db.Where("marker", key).First(&config)
+	res := h.DB.Where("marker", key).First(&config)
 	if res.Error != nil {
 		resp.ERROR(c, res.Error.Error())
 		return
 	}
 
-	var m map[string]interface{}
-	err := utils.JsonDecode(config.Config, &m)
+	var value map[string]interface{}
+	err := utils.JsonDecode(config.Config, &value)
 	if err != nil {
 		resp.ERROR(c, err.Error())
 		return
 	}
 
-	resp.SUCCESS(c, m)
+	resp.SUCCESS(c, value)
 }

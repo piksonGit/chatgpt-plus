@@ -1,6 +1,6 @@
 Listen = "0.0.0.0:5678"
 ProxyURL = "" # 如 http://127.0.0.1:7777
-MysqlDns = "root:12345678@tcp(172.22.11.200:3307)/chatgpt_plus?charset=utf8&parseTime=True&loc=Local"
+MysqlDns = "root:12345678@tcp(172.22.11.200:3307)/chatgpt_plus?charset=utf8mb4&collation=utf8mb4_unicode_ci&parseTime=True&loc=Local"
 StaticDir = "./static" # 静态资源的目录
 StaticUrl = "/static" # 静态资源访问 URL
 AesEncryptKey = ""
@@ -9,10 +9,6 @@ WeChatBot = false
 [Session]
   SecretKey = "azyehq3ivunjhbntz78isj00i4hz2mt9xtddysfucxakadq4qbfrt0b7q3lnvg80" # 注意：这个是 JWT Token 授权密钥，生产环境请务必更换
   MaxAge = 86400
-
-[Manager]
-  Username = "admin"
-  Password = "admin123" # 如果是生产环境的话，这里管理员的密码记得修改
 
 [Redis] # redis 配置信息
   Host = "localhost"
@@ -46,7 +42,7 @@ WeChatBot = false
    Active = "local" # 默认使用本地文件存储引擎
    [OSS.Local]
      BasePath = "./static/upload" # 本地文件上传根路径
-     BaseURL = "/static/upload" # 本地上传文件根 URL 如果是线上，则直接设置为 /static/upload 即可
+     BaseURL = "http://localhost:5678/static/upload" # 本地上传文件前缀 URL，线上需要把 localhost 替换成自己的实际域名或者IP
    [OSS.Minio]
      Endpoint = "" # 如 172.22.11.200:9000
      AccessKey = "" # 自己去 Minio 控制台去创建一个 Access Key
@@ -60,25 +56,24 @@ WeChatBot = false
        AccessSecret = ""
        Bucket = ""
        Domain = "" # OSS Bucket 所绑定的域名，如 https://img.r9it.com
+   [OSS.AliYun]
+       Endpoint = "oss-cn-hangzhou.aliyuncs.com"
+       AccessKey = ""
+       AccessSecret = ""
+       Bucket = "chatgpt-plus"
+       SubDir = ""
+       Domain = ""
 
-[[MjConfigs]]
-  Enabled = false
-  UserToken = ""
-  BotToken = ""
-  GuildId = ""
-  ChanelId = ""
-  UseCDN = false #是否使用反向代理访问，设置为true下面的设置才会生效
-  DiscordAPI = "" # discord API 反代地址
-  DiscordCDN = "" # mj 图片反代地址
-  DiscordGateway = "" # discord 机器人反代地址
+[[MjProxyConfigs]]
+  Enabled = true
+  ApiURL = "http://midjourney-proxy:8082"
+  ApiKey = "sk-geekmaster"
 
 [[MjPlusConfigs]]
   Enabled = false
-  ApiURL = "https://api.chatgpt-plus.net" # 目前暂时不支持更改
-  CdnURL = "" # CND 加速的 URL，如果有的话就设置
+  ApiURL = "https://api.chat-plus.net"
   Mode = "fast" # MJ 绘画模式，可选值 relax/fast/turbo
   ApiKey = "sk-xxx"
-  NotifyURL = "https://ai.r9it.com/api/mj/notify" # 这里需要改成你的域名
 
 [[SdConfigs]]
   Enabled = false

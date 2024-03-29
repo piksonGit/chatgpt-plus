@@ -13,6 +13,7 @@
     "clipboard": "^2.0.11",
     "compressorjs": "^1.2.1",
     "core-js": "^3.8.3",
+    "echarts": "^5.5.0",
     "element-plus": "^2.3.0",
     "good-storage": "^1.1.1",
     "highlight.js": "^11.7.0",
@@ -40,7 +41,8 @@
     "eslint": "^7.32.0",
     "eslint-plugin-vue": "^8.0.3",
     "stylus": "^0.58.1",
-    "stylus-loader": "^7.0.0"
+    "stylus-loader": "^7.0.0",
+    "webpack": "^5.90.3"
   },
   "eslintConfig": {
     "root": true,

@@ -82,8 +82,8 @@
       <el-main v-loading="loading" element-loading-background="rgba(122, 122, 122, 0.3)">
         <div class="chat-head">
           <div class="chat-config">
-            <span class="role-select-label">聊天角色：</span>
-            <el-select v-model="roleId" filterable placeholder="角色" class="role-select" @change="newChat">
+            <!--            <span class="role-select-label">聊天角色：</span>-->
+            <el-select v-model="roleId" filterable placeholder="角色" class="role-select" @change="_newChat">
               <el-option
                   v-for="item in roles"
                   :key="item.id"
@@ -97,7 +97,7 @@
               </el-option>
             </el-select>
 
-            <el-select v-model="modelID" placeholder="模型" @change="newChat">
+            <el-select v-model="modelID" placeholder="模型" @change="_newChat">
               <el-option
                   v-for="item in models"
                   :key="item.id"
@@ -243,19 +243,21 @@
     </el-dialog>
 
     <config-dialog v-if="isLogin" :show="showConfigDialog" :models="models" @hide="showConfigDialog = false"/>
+
+    <login-dialog :show="showLoginDialog" @hide="showLoginDialog =  false" @success="initData"/>
   </div>
 
 
 </template>
 <script setup>
-import {nextTick, onMounted, ref} from 'vue'
+import {nextTick, onMounted, onUnmounted, ref} from 'vue'
 import ChatPrompt from "@/components/ChatPrompt.vue";
 import ChatReply from "@/components/ChatReply.vue";
 import {
   ArrowDown,
   Check,
   Close,
-  Delete, Document,
+  Delete,
   Edit,
   Plus,
   Promotion,
@@ -265,15 +267,7 @@ import {
   VideoPause
 } from '@element-plus/icons-vue'
 import 'highlight.js/styles/a11y-dark.css'
-import {
-  dateFormat,
-  escapeHTML,
-  isMobile,
-  processContent,
-  randString,
-  removeArrayItem,
-  UUID
-} from "@/utils/libs";
+import {dateFormat, escapeHTML, isMobile, processContent, randString, removeArrayItem, UUID} from "@/utils/libs";
 import {ElMessage, ElMessageBox} from "element-plus";
 import hl from "highlight.js";
 import {getSessionId, getUserToken, removeUserToken} from "@/store/session";
@@ -285,6 +279,7 @@ import {checkSession} from "@/action/session";
 import Welcome from "@/components/Welcome.vue";
 import ChatMidJourney from "@/components/ChatMidJourney.vue";
 import FileSelect from "@/components/FileSelect.vue";
+import LoginDialog from "@/components/LoginDialog.vue";
 
 const title = ref('ChatGPT-智能助手');
 const models = ref([])
@@ -303,6 +298,7 @@ const roleId = ref(0)
 const newChatItem = ref(null);
 const router = useRouter();
 const showConfigDialog = ref(false);
+const showLoginDialog = ref(false)
 const isLogin = ref(false)
 const showHello = ref(true)
 const textInput = ref(null)
@@ -314,26 +310,73 @@ if (isMobile()) {
   router.replace("/mobile")
 }
 
+// 获取系统配置
+httpGet("/api/config/get?key=system").then(res => {
+  title.value = res.data.title
+}).catch(e => {
+  ElMessage.error("获取系统配置失败：" + e.message)
+})
+
+// 获取系统公告
+httpGet("/api/config/get?key=notice").then(res => {
+  try {
+    notice.value = md.render(res.data['content'])
+    const oldNotice = localStorage.getItem(noticeKey.value);
+    // 如果公告有更新，则显示公告
+    if (oldNotice !== notice.value && notice.value.length > 10) {
+      showNotice.value = true
+    }
+  } catch (e) {
+  }
+
+}).catch(e => {
+  ElMessage.error("获取系统配置失败：" + e.message)
+})
+
 onMounted(() => {
   resizeElement();
+  initData()
+
+  const clipboard = new Clipboard('.copy-reply, .copy-code-btn');
+  clipboard.on('success', () => {
+    ElMessage.success('复制成功！');
+  })
+
+  clipboard.on('error', () => {
+    ElMessage.error('复制失败！');
+  })
+
+  window.onresize = () => resizeElement();
+});
+
+onUnmounted(() => {
+  socket.value = null
+})
+
+// 初始化数据
+const initData = () => {
+  // 检查会话
   checkSession().then((user) => {
     loginUser.value = user
     isLogin.value = true
+
     // 获取会话列表
-    httpGet("/api/chat/list?user_id=" + loginUser.value.id).then((res) => {
+    httpGet("/api/chat/list").then((res) => {
       if (res.data) {
         chatList.value = res.data;
         allChats.value = res.data;
       }
+
       // 加载模型
-      httpGet('/api/model/list?enable=1').then(res => {
+      httpGet('/api/model/list').then(res => {
         models.value = res.data
         modelID.value = models.value[0].id
 
         // 加载角色列表
-        httpGet(`/api/role/list?user_id=${user.id}`).then((res) => {
+        httpGet(`/api/role/list`).then((res) => {
           roles.value = res.data;
           roleId.value = roles.value[0]['id'];
+
           const chatId = localStorage.getItem("chat_id")
           const chat = getChatById(chatId)
           if (chat === null) {
@@ -349,45 +392,38 @@ onMounted(() => {
       }).catch(e => {
         ElMessage.error("加载模型失败: " + e.message)
       })
-
     }).catch(() => {
-      // TODO: 增加重试按钮
+      ElMessage.error("加载会话列表失败！")
+    })
+  }).catch(() => {
+    loading.value = false
+    // 加载会话
+    httpGet("/api/chat/list").then((res) => {
+      if (res.data) {
+        chatList.value = res.data;
+        allChats.value = res.data;
+      }
+    }).catch(() => {
       ElMessage.error("加载会话列表失败！")
     })
 
-    // 获取系统配置
-    httpGet("/api/admin/config/get?key=system").then(res => {
-      title.value = res.data.title
+    // 加载模型
+    httpGet('/api/model/list').then(res => {
+      models.value = res.data
+      modelID.value = models.value[0].id
     }).catch(e => {
-      ElMessage.error("获取系统配置失败：" + e.message)
+      ElMessage.error("加载模型失败: " + e.message)
     })
 
-    // 获取系统公告
-    httpGet("/api/admin/config/get?key=notice").then(res => {
-      notice.value = md.render(res.data['content'])
-      const oldNotice = localStorage.getItem(noticeKey.value);
-      // 如果公告有更新，则显示公告
-      if (oldNotice !== notice.value) {
-        showNotice.value = true
-      }
-    }).catch(e => {
-      ElMessage.error("获取系统配置失败：" + e.message)
+    // 加载角色列表
+    httpGet(`/api/role/list`).then((res) => {
+      roles.value = res.data;
+      roleId.value = roles.value[0]['id'];
+    }).catch((e) => {
+      ElMessage.error('获取聊天角色失败: ' + e.messages)
     })
-  }).catch(() => {
-    router.push('/login')
-  });
-
-  const clipboard = new Clipboard('.copy-reply, .copy-code-btn');
-  clipboard.on('success', () => {
-    ElMessage.success('复制成功！');
   })
-
-  clipboard.on('error', () => {
-    ElMessage.error('复制失败！');
-  })
-
-  window.onresize = () => resizeElement();
-});
+}
 
 const getRoleById = function (rid) {
   for (let i = 0; i < roles.value.length; i++) {
@@ -404,8 +440,17 @@ const resizeElement = function () {
   leftBoxHeight.value = window.innerHeight - 43 - 47 - 45;
 };
 
+const _newChat = () => {
+  if (isLogin.value) {
+    newChat()
+  }
+}
 // 新建会话
-const newChat = function () {
+const newChat = () => {
+  if (!isLogin.value) {
+    showLoginDialog.value = true
+    return;
+  }
   // 已有新开的会话
   if (newChatItem.value !== null && newChatItem.value['role_id'] === roles.value[0]['role_id']) {
     return;
@@ -668,12 +713,11 @@ const connect = function (chat_id, role_id) {
   });
 
   _socket.addEventListener('close', () => {
-    if (activelyClose.value) { // 忽略主动关闭
+    if (activelyClose.value || socket.value === null) { // 忽略主动关闭
       return;
     }
     // 停止发送消息
     disableInput(true)
-    socket.value = null;
     loading.value = true;
     checkSession().then(() => {
       connect(chat_id, role_id)
@@ -718,6 +762,11 @@ const autofillPrompt = (text) => {
 }
 // 发送消息
 const sendMessage = function () {
+  if (!isLogin.value) {
+    showLoginDialog.value = true
+    return;
+  }
+
   if (canSend.value === false) {
     ElMessage.warning("AI 正在作答中，请稍后...");
     return
@@ -780,8 +829,8 @@ const clearAllChats = function () {
 const logout = function () {
   activelyClose.value = true;
   httpGet('/api/user/logout').then(() => {
-    removeUserToken();
-    router.push('/login');
+    removeUserToken()
+    router.push("/login")
   }).catch(() => {
     ElMessage.error('注销失败！');
   })

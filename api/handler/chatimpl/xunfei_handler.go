@@ -50,15 +50,16 @@ type xunFeiResp struct {
 }
 
 var Model2URL = map[string]string{
-	"general":   "v1.1",
-	"generalv2": "v2.1",
-	"generalv3": "v3.1",
+	"general":     "v1.1",
+	"generalv2":   "v2.1",
+	"generalv3":   "v3.1",
+	"generalv3.5": "v3.5",
 }
 
 // 科大讯飞消息发送实现
 
 func (h *ChatHandler) sendXunFeiMessage(
-	chatCtx []interface{},
+	chatCtx []types.Message,
 	req types.ApiRequest,
 	userVo vo.User,
 	ctx context.Context,
@@ -68,13 +69,13 @@ func (h *ChatHandler) sendXunFeiMessage(
 	ws *types.WsClient) error {
 	promptCreatedAt := time.Now() // 记录提问时间
 	var apiKey model.ApiKey
-	res := h.db.Where("platform = ?", session.Model.Platform).Where("type = ?", "chat").Where("enabled = ?", true).Order("last_used_at ASC").First(&apiKey)
+	res := h.DB.Where("platform = ?", session.Model.Platform).Where("type = ?", "chat").Where("enabled = ?", true).Order("last_used_at ASC").First(&apiKey)
 	if res.Error != nil {
 		utils.ReplyMessage(ws, "抱歉😔😔😔，系统已经没有可用的 API KEY，请联系管理员！")
 		return nil
 	}
 	// 更新 API KEY 的最后使用时间
-	h.db.Model(&apiKey).UpdateColumn("last_used_at", time.Now().Unix())
+	h.DB.Model(&apiKey).UpdateColumn("last_used_at", time.Now().Unix())
 
 	d := websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
@@ -86,6 +87,7 @@ func (h *ChatHandler) sendXunFeiMessage(
 	}
 
 	apiURL := strings.Replace(apiKey.ApiURL, "{version}", Model2URL[req.Model], 1)
+	logger.Debugf("Sending %s request, ApiURL:%s, API KEY:%s, PROXY: %s, Model: %s", session.Model.Platform, apiURL, apiKey.Value, apiKey.ProxyURL, req.Model)
 	wsURL, err := assembleAuthUrl(apiURL, key[1], key[2])
 	//握手并建立websocket 连接
 	conn, resp, err := d.Dial(wsURL, nil)
@@ -166,9 +168,6 @@ func (h *ChatHandler) sendXunFeiMessage(
 
 	// 消息发送成功
 	if len(contents) > 0 {
-		// 更新用户的对话次数
-		h.subUserCalls(userVo, session)
-
 		if message.Role == "" {
 			message.Role = "assistant"
 		}
@@ -176,65 +175,64 @@ func (h *ChatHandler) sendXunFeiMessage(
 		useMsg := types.Message{Role: "user", Content: prompt}
 
 		// 更新上下文消息，如果是调用函数则不需要更新上下文
-		if h.App.ChatConfig.EnableContext {
+		if h.App.SysConfig.EnableContext {
 			chatCtx = append(chatCtx, useMsg)  // 提问消息
 			chatCtx = append(chatCtx, message) // 回复消息
 			h.App.ChatContexts.Put(session.ChatId, chatCtx)
 		}
 
 		// 追加聊天记录
-		if h.App.ChatConfig.EnableHistory {
-			// for prompt
-			promptToken, err := utils.CalcTokens(prompt, req.Model)
-			if err != nil {
-				logger.Error(err)
-			}
-			historyUserMsg := model.ChatMessage{
-				UserId:     userVo.Id,
-				ChatId:     session.ChatId,
-				RoleId:     role.Id,
-				Type:       types.PromptMsg,
-				Icon:       userVo.Avatar,
-				Content:    template.HTMLEscapeString(prompt),
-				Tokens:     promptToken,
-				UseContext: true,
-				Model:      req.Model,
-			}
-			historyUserMsg.CreatedAt = promptCreatedAt
-			historyUserMsg.UpdatedAt = promptCreatedAt
-			res := h.db.Save(&historyUserMsg)
-			if res.Error != nil {
-				logger.Error("failed to save prompt history message: ", res.Error)
-			}
-
-			// for reply
-			// 计算本次对话消耗的总 token 数量
-			replyToken, _ := utils.CalcTokens(message.Content, req.Model)
-			totalTokens := replyToken + getTotalTokens(req)
-			historyReplyMsg := model.ChatMessage{
-				UserId:     userVo.Id,
-				ChatId:     session.ChatId,
-				RoleId:     role.Id,
-				Type:       types.ReplyMsg,
-				Icon:       role.Icon,
-				Content:    message.Content,
-				Tokens:     totalTokens,
-				UseContext: true,
-				Model:      req.Model,
-			}
-			historyReplyMsg.CreatedAt = replyCreatedAt
-			historyReplyMsg.UpdatedAt = replyCreatedAt
-			res = h.db.Create(&historyReplyMsg)
-			if res.Error != nil {
-				logger.Error("failed to save reply history message: ", res.Error)
-			}
-			// 更新用户信息
-			h.incUserTokenFee(userVo.Id, totalTokens)
+		// for prompt
+		promptToken, err := utils.CalcTokens(prompt, req.Model)
+		if err != nil {
+			logger.Error(err)
 		}
+		historyUserMsg := model.ChatMessage{
+			UserId:     userVo.Id,
+			ChatId:     session.ChatId,
+			RoleId:     role.Id,
+			Type:       types.PromptMsg,
+			Icon:       userVo.Avatar,
+			Content:    template.HTMLEscapeString(prompt),
+			Tokens:     promptToken,
+			UseContext: true,
+			Model:      req.Model,
+		}
+		historyUserMsg.CreatedAt = promptCreatedAt
+		historyUserMsg.UpdatedAt = promptCreatedAt
+		res := h.DB.Save(&historyUserMsg)
+		if res.Error != nil {
+			logger.Error("failed to save prompt history message: ", res.Error)
+		}
+
+		// for reply
+		// 计算本次对话消耗的总 token 数量
+		replyTokens, _ := utils.CalcTokens(message.Content, req.Model)
+		totalTokens := replyTokens + getTotalTokens(req)
+		historyReplyMsg := model.ChatMessage{
+			UserId:     userVo.Id,
+			ChatId:     session.ChatId,
+			RoleId:     role.Id,
+			Type:       types.ReplyMsg,
+			Icon:       role.Icon,
+			Content:    message.Content,
+			Tokens:     totalTokens,
+			UseContext: true,
+			Model:      req.Model,
+		}
+		historyReplyMsg.CreatedAt = replyCreatedAt
+		historyReplyMsg.UpdatedAt = replyCreatedAt
+		res = h.DB.Create(&historyReplyMsg)
+		if res.Error != nil {
+			logger.Error("failed to save reply history message: ", res.Error)
+		}
+
+		// 更新用户算力
+		h.subUserPower(userVo, session, promptToken, replyTokens)
 
 		// 保存当前会话
 		var chatItem model.ChatItem
-		res := h.db.Where("chat_id = ?", session.ChatId).First(&chatItem)
+		res = h.DB.Where("chat_id = ?", session.ChatId).First(&chatItem)
 		if res.Error != nil {
 			chatItem.ChatId = session.ChatId
 			chatItem.UserId = session.UserId
@@ -246,7 +244,7 @@ func (h *ChatHandler) sendXunFeiMessage(
 				chatItem.Title = prompt
 			}
 			chatItem.Model = req.Model
-			h.db.Create(&chatItem)
+			h.DB.Create(&chatItem)
 		}
 	}
 
@@ -262,7 +260,7 @@ func buildRequest(appid string, req types.ApiRequest) map[string]interface{} {
 		"parameter": map[string]interface{}{
 			"chat": map[string]interface{}{
 				"domain":      req.Model,
-				"temperature": float64(req.Temperature),
+				"temperature": req.Temperature,
 				"top_k":       int64(6),
 				"max_tokens":  int64(req.MaxTokens),
 				"auditing":    "default",

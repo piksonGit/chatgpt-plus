@@ -7,37 +7,35 @@ import (
 	"chatplus/store/vo"
 	"chatplus/utils"
 	"chatplus/utils/resp"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"math"
 	"strings"
 	"sync"
+	"time"
 )
 
 type RewardHandler struct {
 	BaseHandler
-	db   *gorm.DB
 	lock sync.Mutex
 }
 
-func NewRewardHandler(server *core.AppServer, db *gorm.DB) *RewardHandler {
-	h := RewardHandler{db: db, lock: sync.Mutex{}}
-	h.App = server
-	return &h
+func NewRewardHandler(app *core.AppServer, db *gorm.DB) *RewardHandler {
+	return &RewardHandler{BaseHandler: BaseHandler{App: app, DB: db}}
 }
 
 // Verify 打赏码核销
 func (h *RewardHandler) Verify(c *gin.Context) {
 	var data struct {
 		TxId string `json:"tx_id"`
-		Type string `json:"type"`
 	}
 	if err := c.ShouldBindJSON(&data); err != nil {
 		resp.ERROR(c, types.InvalidArgs)
 		return
 	}
 
-	user, err := utils.GetLoginUser(c, h.db)
+	user, err := h.GetLoginUser(c)
 	if err != nil {
 		resp.HACKER(c)
 		return
@@ -50,7 +48,7 @@ func (h *RewardHandler) Verify(c *gin.Context) {
 	defer h.lock.Unlock()
 
 	var item model.Reward
-	res := h.db.Where("tx_id = ?", data.TxId).First(&item)
+	res := h.DB.Where("tx_id = ?", data.TxId).First(&item)
 	if res.Error != nil {
 		resp.ERROR(c, "无效的众筹交易流水号！")
 		return
@@ -61,18 +59,13 @@ func (h *RewardHandler) Verify(c *gin.Context) {
 		return
 	}
 
-	tx := h.db.Begin()
+	tx := h.DB.Begin()
 	exchange := vo.RewardExchange{}
-	if data.Type == "chat" {
-		calls := math.Ceil(item.Amount / h.App.SysConfig.ChatCallPrice)
-		exchange.Calls = int(calls)
-		res = h.db.Model(&user).UpdateColumn("calls", gorm.Expr("calls + ?", calls))
-	} else if data.Type == "img" {
-		calls := math.Ceil(item.Amount / h.App.SysConfig.ImgCallPrice)
-		exchange.ImgCalls = int(calls)
-		res = h.db.Model(&user).UpdateColumn("img_calls", gorm.Expr("img_calls + ?", calls))
-	}
+	power := math.Ceil(item.Amount / h.App.SysConfig.PowerPrice)
+	exchange.Power = int(power)
+	res = tx.Model(&user).UpdateColumn("power", gorm.Expr("power + ?", exchange.Power))
 	if res.Error != nil {
+		tx.Rollback()
 		resp.ERROR(c, "更新数据库失败！")
 		return
 	}
@@ -81,13 +74,25 @@ func (h *RewardHandler) Verify(c *gin.Context) {
 	item.Status = true
 	item.UserId = user.Id
 	item.Exchange = utils.JsonEncode(exchange)
-	res = h.db.Updates(&item)
+	res = tx.Updates(&item)
 	if res.Error != nil {
 		tx.Rollback()
 		resp.ERROR(c, "更新数据库失败！")
 		return
 	}
 
+	// 记录算力充值日志
+	h.DB.Create(&model.PowerLog{
+		UserId:    user.Id,
+		Username:  user.Username,
+		Type:      types.PowerReward,
+		Amount:    exchange.Power,
+		Balance:   user.Power + exchange.Power,
+		Mark:      types.PowerAdd,
+		Model:     "众筹支付",
+		Remark:    fmt.Sprintf("众筹充值算力，金额：%f，价格：%f", item.Amount, h.App.SysConfig.PowerPrice),
+		CreatedAt: time.Now(),
+	})
 	tx.Commit()
 	resp.SUCCESS(c)
 

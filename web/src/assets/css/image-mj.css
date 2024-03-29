@@ -1,5 +1,6 @@
 .page-mj {
   background-color: #282c34;
+  height: 100vh;
 }
 .page-mj .inner {
   display: flex;
@@ -386,15 +387,19 @@
   font-size: 50px;
   margin-bottom: 10px;
 }
-.page-mj .inner .task-list-box .task-list-inner .job-list-box .el-image.upscale {
-  max-height: 310px;
-}
 .page-mj .inner .task-list-box .task-list-inner .job-list-box .el-image.upscale img {
+  height: 310px;
+}
+.page-mj .inner .task-list-box .task-list-inner .job-list-box .el-image.upscale .image-slot {
   height: 310px;
 }
 .page-mj .inner .task-list-box .task-list-inner .job-list-box .el-image.upscale .el-image-viewer__wrapper img {
   width: auto;
   height: auto;
+}
+.page-mj .inner .task-list-box .no-more-data {
+  text-align: center;
+  padding: 20px;
 }
 .mj-list-item-prompt .el-icon {
   margin-left: 10px;

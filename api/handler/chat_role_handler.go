@@ -14,27 +14,26 @@ import (
 
 type ChatRoleHandler struct {
 	BaseHandler
-	db *gorm.DB
 }
 
 func NewChatRoleHandler(app *core.AppServer, db *gorm.DB) *ChatRoleHandler {
-	handler := &ChatRoleHandler{db: db}
-	handler.App = app
-	return handler
+	return &ChatRoleHandler{BaseHandler: BaseHandler{App: app, DB: db}}
 }
 
-// List get user list
+// List 获取用户聊天应用列表
 func (h *ChatRoleHandler) List(c *gin.Context) {
 	all := h.GetBool(c, "all")
+	userId := h.GetLoginUserId(c)
 	var roles []model.ChatRole
-	res := h.db.Where("enable", true).Order("sort_num ASC").Find(&roles)
+	var roleVos = make([]vo.ChatRole, 0)
+	res := h.DB.Where("enable", true).Order("sort_num ASC").Find(&roles)
 	if res.Error != nil {
-		resp.ERROR(c, "No roles found,"+res.Error.Error())
+		resp.SUCCESS(c, roleVos)
 		return
 	}
 
 	// 获取所有角色
-	if all {
+	if userId == 0 || all {
 		// 转成 vo
 		var roleVos = make([]vo.ChatRole, 0)
 		for _, r := range roles {
@@ -49,21 +48,15 @@ func (h *ChatRoleHandler) List(c *gin.Context) {
 		return
 	}
 
-	userId := h.GetInt(c, "user_id", 0)
-	if userId == 0 {
-		resp.NotAuth(c)
-		return
-	}
 	var user model.User
-	h.db.First(&user, userId)
+	h.DB.First(&user, userId)
 	var roleKeys []string
 	err := utils.JsonDecode(user.ChatRoles, &roleKeys)
 	if err != nil {
 		resp.ERROR(c, "角色解析失败！")
 		return
 	}
-	// 转成 vo
-	var roleVos = make([]vo.ChatRole, 0)
+
 	for _, r := range roles {
 		if !utils.ContainsStr(roleKeys, r.Key) {
 			continue
@@ -80,7 +73,7 @@ func (h *ChatRoleHandler) List(c *gin.Context) {
 
 // UpdateRole 更新用户聊天角色
 func (h *ChatRoleHandler) UpdateRole(c *gin.Context) {
-	user, err := utils.GetLoginUser(c, h.db)
+	user, err := h.GetLoginUser(c)
 	if err != nil {
 		resp.NotAuth(c)
 		return
@@ -94,7 +87,7 @@ func (h *ChatRoleHandler) UpdateRole(c *gin.Context) {
 		return
 	}
 
-	res := h.db.Model(&model.User{}).Where("id = ?", user.Id).UpdateColumn("chat_roles_json", utils.JsonEncode(data.Keys))
+	res := h.DB.Model(&model.User{}).Where("id = ?", user.Id).UpdateColumn("chat_roles_json", utils.JsonEncode(data.Keys))
 	if res.Error != nil {
 		logger.Error("添加应用失败：", err)
 		resp.ERROR(c, "更新数据库失败！")

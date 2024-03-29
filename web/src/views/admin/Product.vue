@@ -1,5 +1,5 @@
 <template>
-  <div class="container list" v-loading="loading">
+  <div class="container product" v-loading="loading">
 
     <div class="handle-box">
       <el-button type="primary" :icon="Plus" @click="add">新增</el-button>
@@ -20,8 +20,7 @@
             <span v-else>{{ scope.row.days }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="calls" label="对话次数"/>
-        <el-table-column prop="img_calls" label="绘图次数"/>
+        <el-table-column prop="power" label="算力"/>
         <el-table-column prop="sales" label="销量"/>
         <el-table-column prop="enabled" label="启用状态">
           <template #default="scope">
@@ -52,7 +51,6 @@
         v-model="showDialog"
         :title="title"
         :close-on-click-modal="false"
-        style="width: 90%; max-width: 600px;"
     >
       <el-form :model="item" label-width="120px" ref="formRef" :rules="rules">
         <el-form-item label="产品名称：" prop="name">
@@ -71,12 +69,8 @@
           <el-input v-model.number="item.days" autocomplete="off" placeholder="会员有效期(天)"/>
         </el-form-item>
 
-        <el-form-item label="对话次数：" prop="calls">
-          <el-input v-model.number="item.calls" autocomplete="off" placeholder="增加对话次数"/>
-        </el-form-item>
-
-        <el-form-item label="绘图次数：" prop="img_calls">
-          <el-input v-model.number="item.img_calls" autocomplete="off" placeholder="增加绘图次数"/>
+        <el-form-item label="算力：" prop="power">
+          <el-input v-model.number="item.power" autocomplete="off" placeholder="增加算力值"/>
         </el-form-item>
 
         <el-form-item label="启用状态：" prop="enable">
@@ -159,13 +153,13 @@ onMounted(() => {
 })
 
 const add = function () {
-  title.value = "新增模型"
+  title.value = "新增产品"
   showDialog.value = true
   item.value = {}
 }
 
 const edit = function (row) {
-  title.value = "修改模型"
+  title.value = "修改产品"
   showDialog.value = true
   item.value = row
 }
@@ -212,7 +206,7 @@ const remove = function (row) {
 </script>
 
 <style lang="stylus" scoped>
-.list {
+.product {
 
   .opt-box {
     padding-bottom: 10px;

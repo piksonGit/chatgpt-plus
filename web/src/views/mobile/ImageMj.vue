@@ -62,14 +62,12 @@
         </div>
 
         <div class="text-line">
-          <van-field
-              v-model="params.prompt"
-              rows="3"
-              autosize
-              label="提示词"
-              type="textarea"
-              placeholder="如：一个美丽的中国女孩站在电影院门口，手上拿着爆米花，微笑，写实风格，电影灯光效果，半身像"
-          />
+          <van-field v-model="params.prompt"
+                     rows="3"
+                     label="提示词"
+                     autosize
+                     type="textarea"
+                     placeholder="请在此输入绘画提示词，系统会自动翻译中文提示词，高手请直接输入英文提示词"/>
         </div>
 
         <van-collapse v-model="activeColspan">
@@ -93,7 +91,7 @@
 
         <div class="text-line">
           <van-button round block type="primary" native-type="submit">
-            <van-tag type="success">可用额度:{{ imgCalls }}</van-tag>
+            <van-tag type="success">可用算力额度:{{ power }}</van-tag>
             立即生成
           </van-button>
         </div>
@@ -140,63 +138,61 @@
                    image-size="80"
                    description="暂无记录"
         />
-        <van-grid :gutter="10" :column-num="2" v-else>
-          <van-grid-item v-for="item in finishedJobs">
-            <div class="job-item">
-              <el-image
-                  :src="item['thumb_url']"
-                  :class="item['can_opt'] ? '' : 'upscale'" :zoom-rate="1.2"
-                  :preview-src-list="[item['img_url']]" fit="cover" :initial-index="0"
-                  loading="lazy" v-if="item.progress > 0">
-                <template #placeholder>
-                  <div class="image-slot">
-                    正在加载图片
-                  </div>
-                </template>
 
-                <template #error>
-                  <div class="image-slot" v-if="item['img_url'] === ''">
-                    <i class="iconfont icon-loading"></i>
-                    <span>正在下载图片</span>
-                  </div>
-                  <div class="image-slot" v-else>
-                    <el-icon>
-                      <Picture/>
-                    </el-icon>
-                  </div>
-                </template>
-              </el-image>
+        <van-list v-else
+                  v-model:error="error"
+                  v-model:loading="loading"
+                  :finished="finished"
+                  error-text="请求失败，点击重新加载"
+                  finished-text="没有更多了"
+                  @load="onLoad"
+        >
+          <van-grid :gutter="10" :column-num="2">
+            <van-grid-item v-for="item in finishedJobs">
+              <div class="job-item">
+                <van-image
+                    :src="item['thumb_url']"
+                    :class="item['can_opt'] ? '' : 'upscale'"
+                    lazy-load
+                    @click="imageView(item)"
+                    fit="cover">
+                  <template v-slot:loading>
+                    <van-loading type="spinner" size="20"/>
+                  </template>
+                </van-image>
 
-              <div class="opt" v-if="item['can_opt']">
+                <div class="opt" v-if="item['can_opt']">
 
-                <van-grid :gutter="0" :column-num="4">
-                  <van-grid-item><a @click="upscale(1, item)" class="opt-btn">U1</a></van-grid-item>
-                  <van-grid-item><a @click="upscale(2, item)" class="opt-btn">U2</a></van-grid-item>
-                  <van-grid-item><a @click="upscale(3, item)" class="opt-btn">U3</a></van-grid-item>
-                  <van-grid-item><a @click="upscale(4, item)" class="opt-btn">U4</a></van-grid-item>
-                  <van-grid-item><a @click="variation(1, item)" class="opt-btn">V1</a></van-grid-item>
-                  <van-grid-item><a @click="variation(2, item)" class="opt-btn">V2</a></van-grid-item>
-                  <van-grid-item><a @click="variation(3, item)" class="opt-btn">V3</a></van-grid-item>
-                  <van-grid-item><a @click="variation(4, item)" class="opt-btn">V4</a></van-grid-item>
-                </van-grid>
+                  <van-grid :gutter="3" :column-num="4">
+                    <van-grid-item><a @click="upscale(1, item)" class="opt-btn">U1</a></van-grid-item>
+                    <van-grid-item><a @click="upscale(2, item)" class="opt-btn">U2</a></van-grid-item>
+                    <van-grid-item><a @click="upscale(3, item)" class="opt-btn">U3</a></van-grid-item>
+                    <van-grid-item><a @click="upscale(4, item)" class="opt-btn">U4</a></van-grid-item>
+                    <van-grid-item><a @click="variation(1, item)" class="opt-btn">V1</a></van-grid-item>
+                    <van-grid-item><a @click="variation(2, item)" class="opt-btn">V2</a></van-grid-item>
+                    <van-grid-item><a @click="variation(3, item)" class="opt-btn">V3</a></van-grid-item>
+                    <van-grid-item><a @click="variation(4, item)" class="opt-btn">V4</a></van-grid-item>
+                  </van-grid>
+                </div>
+
+                <div class="remove">
+                  <el-button type="danger" :icon="Delete" @click="removeImage(item)" circle/>
+                  <el-button type="warning" v-if="item.publish" @click="publishImage(item, false)"
+                             circle>
+                    <i class="iconfont icon-cancel-share"></i>
+                  </el-button>
+                  <el-button type="success" v-else @click="publishImage(item, true)" circle>
+                    <i class="iconfont icon-share-bold"></i>
+                  </el-button>
+                  <el-button type="primary" @click="showPrompt(item)" circle>
+                    <i class="iconfont icon-prompt"></i>
+                  </el-button>
+                </div>
               </div>
+            </van-grid-item>
+          </van-grid>
+        </van-list>
 
-              <div class="remove">
-                <el-button type="danger" :icon="Delete" @click="removeImage(item)" circle/>
-                <el-button type="warning" v-if="item.publish" @click="publishImage(item, false)"
-                           circle>
-                  <i class="iconfont icon-cancel-share"></i>
-                </el-button>
-                <el-button type="success" v-else @click="publishImage(item, true)" circle>
-                  <i class="iconfont icon-share-bold"></i>
-                </el-button>
-                <el-button type="primary" @click="showPrompt(item)" circle>
-                  <i class="iconfont icon-prompt"></i>
-                </el-button>
-              </div>
-            </div>
-          </van-grid-item>
-        </van-grid>
       </div>
 
     </div>
@@ -204,16 +200,23 @@
 </template>
 
 <script setup>
-import {onMounted, ref} from "vue";
-import {showConfirmDialog, showFailToast, showNotify, showToast, showDialog} from "vant";
+import {nextTick, onMounted, onUnmounted, ref} from "vue";
+import {
+  showConfirmDialog,
+  showFailToast,
+  showNotify,
+  showToast,
+  showDialog,
+  showImagePreview,
+  showSuccessToast
+} from "vant";
 import {httpGet, httpPost} from "@/utils/http";
 import Compressor from "compressorjs";
 import {ElMessage} from "element-plus";
 import {getSessionId} from "@/store/session";
 import {checkSession} from "@/action/session";
-import Clipboard from "clipboard";
 import {useRouter} from "vue-router";
-import {Delete, Picture} from "@element-plus/icons-vue";
+import {Delete} from "@element-plus/icons-vue";
 
 const title = ref('MidJourney 绘画')
 const activeColspan = ref([""])
@@ -250,25 +253,38 @@ const params = ref({
   tile: false,
   quality: 0
 })
-const imgCalls = ref(0)
 const userId = ref(0)
 const router = useRouter()
 const runningJobs = ref([])
 const finishedJobs = ref([])
 const socket = ref(null)
+const power = ref(0)
 
 onMounted(() => {
   checkSession().then(user => {
-    imgCalls.value = user['img_calls']
+    power.value = user['power']
     userId.value = user.id
 
-    fetchRunningJobs(userId.value)
-    fetchFinishJobs(userId.value)
+    fetchRunningJobs()
+    fetchFinishJobs(1)
     connect()
 
   }).catch(() => {
     router.push('/login')
   });
+})
+
+onUnmounted(() => {
+  socket.value = null
+})
+
+const mjPower = ref(1)
+const mjActionPower = ref(1)
+httpGet("/api/config/get?key=system").then(res => {
+  mjPower.value = res.data["mj_power"]
+  mjActionPower.value = res.data["mj_action_power"]
+}).catch(e => {
+  ElMessage.error("获取系统配置失败：" + e.message)
 })
 
 const heartbeatHandle = ref(null)
@@ -305,13 +321,15 @@ const connect = () => {
 
   _socket.addEventListener('message', event => {
     if (event.data instanceof Blob) {
-      fetchRunningJobs(userId.value)
-      fetchFinishJobs(userId.value)
+      fetchRunningJobs()
+      fetchFinishJobs(1)
     }
   });
 
   _socket.addEventListener('close', () => {
-    connect()
+    if (socket.value !== null) {
+      connect()
+    }
   });
 }
 
@@ -326,7 +344,11 @@ const fetchRunningJobs = (userId) => {
           message: `任务执行失败：${jobs[i]['err_msg']}`,
           type: 'danger',
         })
-        imgCalls.value += 1
+        if (jobs[i].type === 'image') {
+          power.value += mjPower.value
+        } else {
+          power.value += mjActionPower.value
+        }
         continue
       }
       _jobs.push(jobs[i])
@@ -337,9 +359,15 @@ const fetchRunningJobs = (userId) => {
   })
 }
 
-const fetchFinishJobs = (userId) => {
+const loading = ref(false)
+const finished = ref(false)
+const error = ref(false)
+const page = ref(0)
+const pageSize = ref(10)
+const fetchFinishJobs = (page) => {
+  loading.value = true
   // 获取已完成的任务
-  httpGet(`/api/mj/jobs?status=1&user_id=${userId}`).then(res => {
+  httpGet(`/api/mj/jobs?status=1&page=${page}&page_size=${pageSize.value}`).then(res => {
     const jobs = res.data
     for (let i = 0; i < jobs.length; i++) {
       if (jobs[i]['use_proxy']) {
@@ -356,11 +384,26 @@ const fetchFinishJobs = (userId) => {
         jobs[i]['can_opt'] = true
       }
     }
-    finishedJobs.value = jobs
+    if (jobs.length < pageSize.value) {
+      finished.value = true
+    }
+    if (page === 1) {
+      finishedJobs.value = jobs
+    } else {
+      finishedJobs.value = finishedJobs.value.concat(jobs)
+    }
+    nextTick(() => loading.value = false)
   }).catch(e => {
-    ElMessage.error("获取任务失败：" + e.message)
+    loading.value = false
+    error.value = true
+    showFailToast("获取任务失败：" + e.message)
   })
 }
+
+const onLoad = () => {
+  page.value += 1
+  fetchFinishJobs(page.value)
+};
 
 // 切换图片比例
 const changeRate = (item) => {
@@ -407,7 +450,7 @@ const send = (url, index, item) => {
     prompt: item.prompt,
   }).then(() => {
     ElMessage.success("任务推送成功，请耐心等待任务执行...")
-    imgCalls.value -= 1
+    power.value -= mjActionPower.value
   }).catch(e => {
     ElMessage.error("任务推送失败：" + e.message)
   })
@@ -434,7 +477,7 @@ const generate = () => {
   params.value.img_arr = imgList.value.map(img => img.url)
   httpPost("/api/mj/image", params.value).then(() => {
     showToast("绘画任务推送成功，请耐心等待任务执行")
-    imgCalls.value -= 1
+    power.value -= mjPower.value
   }).catch(e => {
     showFailToast("任务推送失败：" + e.message)
   })
@@ -462,10 +505,10 @@ const publishImage = (item, action) => {
     text = "取消发布"
   }
   httpPost("/api/mj/publish", {id: item.id, action: action}).then(() => {
-    ElMessage.success(text + "成功")
+    showSuccessToast(text + "成功")
     item.publish = action
   }).catch(e => {
-    ElMessage.error(text + "失败：" + e.message)
+    showFailToast(text + "失败：" + e.message)
   })
 }
 
@@ -478,6 +521,9 @@ const showPrompt = (item) => {
   });
 }
 
+const imageView = (item) => {
+  showImagePreview([item['img_url']]);
+}
 </script>
 
 <style lang="stylus">

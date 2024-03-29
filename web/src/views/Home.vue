@@ -11,10 +11,9 @@
           <!--            -->
           <!--          </el-tooltip>-->
           <a @click="changeNav(item)" :class="item.path === curPath ? 'active' : ''">
-            <el-image :src="item.icon_path" :width="20" v-if="item.icon_path"/>
-            <i :class="'iconfont icon-' + item.icon" v-else></i>
+            <el-image :src="item.icon" :width="20"/>
           </a>
-          <div :class="item.path === curPath ? 'title active' : 'title'">{{ item.title }}</div>
+          <div :class="item.url === curPath ? 'title active' : 'title'">{{ item.name }}</div>
         </li>
       </ul>
     </div>
@@ -31,35 +30,39 @@
 <script setup>
 
 import {useRouter} from "vue-router";
-import {checkSession} from "@/action/session";
-import {isMobile} from "@/utils/libs";
-import {ref} from "vue";
+import {onMounted, ref} from "vue";
+import {httpGet} from "@/utils/http";
+import {ElMessage} from "element-plus";
 
 const router = useRouter();
-const logo = '/images/logo.png';
-const navs = ref([
-  {path: "/chat", icon_path: "/images/chat.png", title: "对话聊天"},
-  // {path: "/mj", icon_path: "/images/mj.png", title: "MJ 绘画"},
-  // {path: "/sd", icon_path: "/images/sd.png", title: "SD 绘画"},
-  {path: "/apps", icon: "menu", title: "应用中心"},
-  // {path: "/images-wall", icon: "image-list", title: "作品展示"},
-  {path: "/knowledge", icon: "book", title: "知识库"},
-  {path: "/member", icon: "vip-user", title: "会员计划"},
-  {path: "/invite", icon: "share", title: "推广计划"},
-])
+const logo = ref('/images/logo.png');
+const navs = ref([])
 const curPath = ref(router.currentRoute.value.path)
 
 const changeNav = (item) => {
-  curPath.value = item.path
-  router.push(item.path)
+  curPath.value = item.url
+  router.push(item.url)
 }
+
+onMounted(() => {
+  httpGet("/api/config/get?key=system").then(res => {
+    logo.value = res.data['logo']
+  }).catch(e => {
+    ElMessage.error("获取系统配置失败：" + e.message)
+  })
+  // 获取菜单
+  httpGet("/api/menu/list").then(res => {
+    navs.value = res.data
+  }).catch(e => {
+    ElMessage.error("获取系统菜单失败：" + e.message)
+  })
+})
 </script>
 
 <style lang="stylus" scoped>
 @import '@/assets/iconfont/iconfont.css';
 .home {
   display: flex;
-  background-color: #25272D;
   height 100vh
   width 100%
 
@@ -69,6 +72,7 @@ const changeNav = (item) => {
     width 70px
     padding 10px 6px
     border-right: 1px solid #3c3c3c
+    background-color: #25272D
 
     .logo {
       display flex

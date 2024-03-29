@@ -20,7 +20,7 @@ import (
 
 // OPenAI 消息发送实现
 func (h *ChatHandler) sendOpenAiMessage(
-	chatCtx []interface{},
+	chatCtx []types.Message,
 	req types.ApiRequest,
 	userVo vo.User,
 	ctx context.Context,
@@ -46,8 +46,10 @@ func (h *ChatHandler) sendOpenAiMessage(
 
 		utils.ReplyMessage(ws, ErrorMsg)
 		utils.ReplyMessage(ws, ErrImg)
-		all, _ := io.ReadAll(response.Body)
-		logger.Error(string(all))
+		if response.Body != nil {
+			all, _ := io.ReadAll(response.Body)
+			logger.Error(string(all))
+		}
 		return err
 	} else {
 		defer response.Body.Close()
@@ -98,7 +100,7 @@ func (h *ChatHandler) sendOpenAiMessage(
 			}
 
 			if !utils.IsEmptyValue(tool) {
-				res := h.db.Where("name = ?", tool.Function.Name).First(&function)
+				res := h.DB.Where("name = ?", tool.Function.Name).First(&function)
 				if res.Error == nil {
 					toolCall = true
 					utils.ReplyChunkMessage(ws, types.WsMessage{Type: types.WsStart})
@@ -171,9 +173,6 @@ func (h *ChatHandler) sendOpenAiMessage(
 
 		// 消息发送成功
 		if len(contents) > 0 {
-			// 更新用户的对话次数
-			h.subUserCalls(userVo, session)
-
 			if message.Role == "" {
 				message.Role = "assistant"
 			}
@@ -181,79 +180,77 @@ func (h *ChatHandler) sendOpenAiMessage(
 			useMsg := types.Message{Role: "user", Content: prompt}
 
 			// 更新上下文消息，如果是调用函数则不需要更新上下文
-			if h.App.ChatConfig.EnableContext && toolCall == false {
+			if h.App.SysConfig.EnableContext && toolCall == false {
 				chatCtx = append(chatCtx, useMsg)  // 提问消息
 				chatCtx = append(chatCtx, message) // 回复消息
 				h.App.ChatContexts.Put(session.ChatId, chatCtx)
 			}
 
 			// 追加聊天记录
-			if h.App.ChatConfig.EnableHistory {
-				useContext := true
-				if toolCall {
-					useContext = false
-				}
-
-				// for prompt
-				promptToken, err := utils.CalcTokens(prompt, req.Model)
-				if err != nil {
-					logger.Error(err)
-				}
-				historyUserMsg := model.ChatMessage{
-					UserId:     userVo.Id,
-					ChatId:     session.ChatId,
-					RoleId:     role.Id,
-					Type:       types.PromptMsg,
-					Icon:       userVo.Avatar,
-					Content:    template.HTMLEscapeString(prompt),
-					Tokens:     promptToken,
-					UseContext: useContext,
-					Model:      req.Model,
-				}
-				historyUserMsg.CreatedAt = promptCreatedAt
-				historyUserMsg.UpdatedAt = promptCreatedAt
-				res := h.db.Save(&historyUserMsg)
-				if res.Error != nil {
-					logger.Error("failed to save prompt history message: ", res.Error)
-				}
-
-				// 计算本次对话消耗的总 token 数量
-				var totalTokens = 0
-				if toolCall { // prompt + 函数名 + 参数 token
-					tokens, _ := utils.CalcTokens(function.Name, req.Model)
-					totalTokens += tokens
-					tokens, _ = utils.CalcTokens(utils.InterfaceToString(arguments), req.Model)
-					totalTokens += tokens
-				} else {
-					totalTokens, _ = utils.CalcTokens(message.Content, req.Model)
-				}
-				totalTokens += getTotalTokens(req)
-
-				historyReplyMsg := model.ChatMessage{
-					UserId:     userVo.Id,
-					ChatId:     session.ChatId,
-					RoleId:     role.Id,
-					Type:       types.ReplyMsg,
-					Icon:       role.Icon,
-					Content:    h.extractImgUrl(message.Content),
-					Tokens:     totalTokens,
-					UseContext: useContext,
-					Model:      req.Model,
-				}
-				historyReplyMsg.CreatedAt = replyCreatedAt
-				historyReplyMsg.UpdatedAt = replyCreatedAt
-				res = h.db.Create(&historyReplyMsg)
-				if res.Error != nil {
-					logger.Error("failed to save reply history message: ", res.Error)
-				}
-
-				// 更新用户信息
-				h.incUserTokenFee(userVo.Id, totalTokens)
+			useContext := true
+			if toolCall {
+				useContext = false
 			}
+
+			// for prompt
+			promptToken, err := utils.CalcTokens(prompt, req.Model)
+			if err != nil {
+				logger.Error(err)
+			}
+			historyUserMsg := model.ChatMessage{
+				UserId:     userVo.Id,
+				ChatId:     session.ChatId,
+				RoleId:     role.Id,
+				Type:       types.PromptMsg,
+				Icon:       userVo.Avatar,
+				Content:    template.HTMLEscapeString(prompt),
+				Tokens:     promptToken,
+				UseContext: useContext,
+				Model:      req.Model,
+			}
+			historyUserMsg.CreatedAt = promptCreatedAt
+			historyUserMsg.UpdatedAt = promptCreatedAt
+			res := h.DB.Save(&historyUserMsg)
+			if res.Error != nil {
+				logger.Error("failed to save prompt history message: ", res.Error)
+			}
+
+			// 计算本次对话消耗的总 token 数量
+			var replyTokens = 0
+			if toolCall { // prompt + 函数名 + 参数 token
+				tokens, _ := utils.CalcTokens(function.Name, req.Model)
+				replyTokens += tokens
+				tokens, _ = utils.CalcTokens(utils.InterfaceToString(arguments), req.Model)
+				replyTokens += tokens
+			} else {
+				replyTokens, _ = utils.CalcTokens(message.Content, req.Model)
+			}
+			replyTokens += getTotalTokens(req)
+
+			historyReplyMsg := model.ChatMessage{
+				UserId:     userVo.Id,
+				ChatId:     session.ChatId,
+				RoleId:     role.Id,
+				Type:       types.ReplyMsg,
+				Icon:       role.Icon,
+				Content:    h.extractImgUrl(message.Content),
+				Tokens:     replyTokens,
+				UseContext: useContext,
+				Model:      req.Model,
+			}
+			historyReplyMsg.CreatedAt = replyCreatedAt
+			historyReplyMsg.UpdatedAt = replyCreatedAt
+			res = h.DB.Create(&historyReplyMsg)
+			if res.Error != nil {
+				logger.Error("failed to save reply history message: ", res.Error)
+			}
+
+			// 更新用户算力
+			h.subUserPower(userVo, session, promptToken, replyTokens)
 
 			// 保存当前会话
 			var chatItem model.ChatItem
-			res := h.db.Where("chat_id = ?", session.ChatId).First(&chatItem)
+			res = h.DB.Where("chat_id = ?", session.ChatId).First(&chatItem)
 			if res.Error != nil {
 				chatItem.ChatId = session.ChatId
 				chatItem.UserId = session.UserId
@@ -265,17 +262,19 @@ func (h *ChatHandler) sendOpenAiMessage(
 					chatItem.Title = prompt
 				}
 				chatItem.Model = req.Model
-				h.db.Create(&chatItem)
+				h.DB.Create(&chatItem)
 			}
 		}
 	} else {
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
+			utils.ReplyMessage(ws, "请求 OpenAI API 失败："+err.Error())
 			return fmt.Errorf("error with reading response: %v", err)
 		}
 		var res types.ApiError
 		err = json.Unmarshal(body, &res)
 		if err != nil {
+			utils.ReplyMessage(ws, "请求 OpenAI API 失败：\n"+"```\n"+string(body)+"```")
 			return fmt.Errorf("error with decode response: %v", err)
 		}
 
@@ -283,7 +282,7 @@ func (h *ChatHandler) sendOpenAiMessage(
 		if strings.Contains(res.Error.Message, "This key is associated with a deactivated account") {
 			utils.ReplyMessage(ws, "请求 OpenAI API 失败：API KEY 所关联的账户被禁用。")
 			// 移除当前 API key
-			h.db.Where("value = ?", apiKey).Delete(&model.ApiKey{})
+			h.DB.Where("value = ?", apiKey).Delete(&model.ApiKey{})
 		} else if strings.Contains(res.Error.Message, "You exceeded your current quota") {
 			utils.ReplyMessage(ws, "请求 OpenAI API 失败：API KEY 触发并发限制，请稍后再试。")
 		} else if strings.Contains(res.Error.Message, "This model's maximum context length") {

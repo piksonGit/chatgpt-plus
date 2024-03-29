@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/crypto/sha3"
 )
@@ -59,9 +61,9 @@ func Str2stamp(str string) int64 {
 	if len(str) == 0 {
 		return 0
 	}
-	
+
 	layout := "2006-01-02 15:04:05"
-	t, err := time.Parse(layout, str)
+	t, err := time.ParseInLocation(layout, str, time.Local)
 	if err != nil {
 		return 0
 	}
@@ -91,4 +93,27 @@ func InterfaceToString(value interface{}) string {
 		return str
 	}
 	return JsonEncode(value)
+}
+
+// CutWords 截取前 N 个单词
+func CutWords(str string, num int) string {
+	// 按空格分割字符串为单词切片
+	words := strings.Fields(str)
+
+	// 如果单词数量超过指定数量，则裁剪单词；否则保持原样
+	if len(words) > num {
+		return strings.Join(words[:num], " ") + " ..."
+	} else {
+		return str
+	}
+}
+
+// HasChinese 判断文本是否含有中文
+func HasChinese(text string) bool {
+	for _, char := range text {
+		if unicode.Is(unicode.Scripts["Han"], char) {
+			return true
+		}
+	}
+	return false
 }

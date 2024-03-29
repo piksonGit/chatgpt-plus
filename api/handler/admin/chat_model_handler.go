@@ -15,26 +15,26 @@ import (
 
 type ChatModelHandler struct {
 	handler.BaseHandler
-	db *gorm.DB
 }
 
 func NewChatModelHandler(app *core.AppServer, db *gorm.DB) *ChatModelHandler {
-	h := ChatModelHandler{db: db}
-	h.App = app
-	return &h
+	return &ChatModelHandler{BaseHandler: handler.BaseHandler{App: app, DB: db}}
 }
 
 func (h *ChatModelHandler) Save(c *gin.Context) {
 	var data struct {
-		Id        uint   `json:"id"`
-		Name      string `json:"name"`
-		Value     string `json:"value"`
-		Enabled   bool   `json:"enabled"`
-		SortNum   int    `json:"sort_num"`
-		Open      bool   `json:"open"`
-		Platform  string `json:"platform"`
-		Weight    int    `json:"weight"`
-		CreatedAt int64  `json:"created_at"`
+		Id          uint    `json:"id"`
+		Name        string  `json:"name"`
+		Value       string  `json:"value"`
+		Enabled     bool    `json:"enabled"`
+		SortNum     int     `json:"sort_num"`
+		Open        bool    `json:"open"`
+		Platform    string  `json:"platform"`
+		Power       int     `json:"power"`
+		MaxTokens   int     `json:"max_tokens"`  // 最大响应长度
+		MaxContext  int     `json:"max_context"` // 最大上下文长度
+		Temperature float32 `json:"temperature"` // 模型温度
+		CreatedAt   int64   `json:"created_at"`
 	}
 	if err := c.ShouldBindJSON(&data); err != nil {
 		resp.ERROR(c, types.InvalidArgs)
@@ -42,18 +42,21 @@ func (h *ChatModelHandler) Save(c *gin.Context) {
 	}
 
 	item := model.ChatModel{
-		Platform: data.Platform,
-		Name:     data.Name,
-		Value:    data.Value,
-		Enabled:  data.Enabled,
-		SortNum:  data.SortNum,
-		Open:     data.Open,
-		Weight:   data.Weight}
+		Platform:    data.Platform,
+		Name:        data.Name,
+		Value:       data.Value,
+		Enabled:     data.Enabled,
+		SortNum:     data.SortNum,
+		Open:        data.Open,
+		MaxTokens:   data.MaxTokens,
+		MaxContext:  data.MaxContext,
+		Temperature: data.Temperature,
+		Power:       data.Power}
 	item.Id = data.Id
 	if item.Id > 0 {
 		item.CreatedAt = time.Unix(data.CreatedAt, 0)
 	}
-	res := h.db.Save(&item)
+	res := h.DB.Save(&item)
 	if res.Error != nil {
 		resp.ERROR(c, "更新数据库失败！")
 		return
@@ -72,7 +75,12 @@ func (h *ChatModelHandler) Save(c *gin.Context) {
 
 // List 模型列表
 func (h *ChatModelHandler) List(c *gin.Context) {
-	session := h.db.Session(&gorm.Session{})
+	if err := utils.CheckPermission(c, h.DB); err != nil {
+		resp.NotPermission(c)
+		return
+	}
+
+	session := h.DB.Session(&gorm.Session{})
 	enable := h.GetBool(c, "enable")
 	if enable {
 		session = session.Where("enabled", enable)
@@ -109,7 +117,7 @@ func (h *ChatModelHandler) Set(c *gin.Context) {
 		return
 	}
 
-	res := h.db.Model(&model.ChatModel{}).Where("id = ?", data.Id).Update(data.Filed, data.Value)
+	res := h.DB.Model(&model.ChatModel{}).Where("id = ?", data.Id).Update(data.Filed, data.Value)
 	if res.Error != nil {
 		resp.ERROR(c, "更新数据库失败！")
 		return
@@ -129,7 +137,7 @@ func (h *ChatModelHandler) Sort(c *gin.Context) {
 	}
 
 	for index, id := range data.Ids {
-		res := h.db.Model(&model.ChatModel{}).Where("id = ?", id).Update("sort_num", data.Sorts[index])
+		res := h.DB.Model(&model.ChatModel{}).Where("id = ?", id).Update("sort_num", data.Sorts[index])
 		if res.Error != nil {
 			resp.ERROR(c, "更新数据库失败！")
 			return
@@ -141,13 +149,15 @@ func (h *ChatModelHandler) Sort(c *gin.Context) {
 
 func (h *ChatModelHandler) Remove(c *gin.Context) {
 	id := h.GetInt(c, "id", 0)
+	if id <= 0 {
+		resp.ERROR(c, types.InvalidArgs)
+		return
+	}
 
-	if id > 0 {
-		res := h.db.Where("id = ?", id).Delete(&model.ChatModel{})
-		if res.Error != nil {
-			resp.ERROR(c, "更新数据库失败！")
-			return
-		}
+	res := h.DB.Where("id = ?", id).Delete(&model.ChatModel{})
+	if res.Error != nil {
+		resp.ERROR(c, "更新数据库失败！")
+		return
 	}
 	resp.SUCCESS(c)
 }

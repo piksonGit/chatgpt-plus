@@ -14,27 +14,30 @@ import (
 
 type ChatHandler struct {
 	handler.BaseHandler
-	db *gorm.DB
 }
 
 func NewChatHandler(app *core.AppServer, db *gorm.DB) *ChatHandler {
-	h := ChatHandler{db: db}
-	h.App = app
-	return &h
+	return &ChatHandler{BaseHandler: handler.BaseHandler{App: app, DB: db}}
 }
 
 type chatItemVo struct {
-	Username  string `json:"username"`
-	UserId    uint   `json:"user_id"`
-	ChatId    string `json:"chat_id"`
-	Title     string `json:"title"`
-	Model     string `json:"model"`
-	Token     int    `json:"token"`
-	CreatedAt int64  `json:"created_at"`
-	MsgNum    int    `json:"msg_num"` // 消息数量
+	Username  string      `json:"username"`
+	UserId    uint        `json:"user_id"`
+	ChatId    string      `json:"chat_id"`
+	Title     string      `json:"title"`
+	Role      vo.ChatRole `json:"role"`
+	Model     string      `json:"model"`
+	Token     int         `json:"token"`
+	CreatedAt int64       `json:"created_at"`
+	MsgNum    int         `json:"msg_num"` // 消息数量
 }
 
 func (h *ChatHandler) List(c *gin.Context) {
+	if err := utils.CheckPermission(c, h.DB); err != nil {
+		resp.NotPermission(c)
+		return
+	}
+
 	var data struct {
 		Title    string   `json:"title"`
 		UserId   uint     `json:"user_id"`
@@ -48,7 +51,7 @@ func (h *ChatHandler) List(c *gin.Context) {
 		return
 	}
 
-	session := h.db.Session(&gorm.Session{})
+	session := h.DB.Session(&gorm.Session{})
 	if data.Title != "" {
 		session = session.Where("title LIKE ?", "%"+data.Title+"%")
 	}
@@ -73,24 +76,37 @@ func (h *ChatHandler) List(c *gin.Context) {
 	if res.Error == nil {
 		userIds := make([]uint, 0)
 		chatIds := make([]string, 0)
+		roleIds := make([]uint, 0)
 		for _, item := range items {
 			userIds = append(userIds, item.UserId)
 			chatIds = append(chatIds, item.ChatId)
+			roleIds = append(roleIds, item.RoleId)
 		}
 		var messages []model.ChatMessage
 		var users []model.User
-		h.db.Where("chat_id IN ?", chatIds).Find(&messages)
-		h.db.Where("id IN ?", userIds).Find(&users)
+		var roles []model.ChatRole
+		h.DB.Where("chat_id IN ?", chatIds).Find(&messages)
+		h.DB.Where("id IN ?", userIds).Find(&users)
+		h.DB.Where("id IN ?", roleIds).Find(&roles)
 
 		tokenMap := make(map[string]int)
 		userMap := make(map[uint]string)
 		msgMap := make(map[string]int)
+		roleMap := make(map[uint]vo.ChatRole)
 		for _, msg := range messages {
 			tokenMap[msg.ChatId] += msg.Tokens
 			msgMap[msg.ChatId] += 1
 		}
 		for _, user := range users {
 			userMap[user.Id] = user.Username
+		}
+		for _, r := range roles {
+			var roleVo vo.ChatRole
+			err := utils.CopyObject(r, &roleVo)
+			if err != nil {
+				continue
+			}
+			roleMap[r.Id] = roleVo
 		}
 		for _, item := range items {
 			list = append(list, chatItemVo{
@@ -101,6 +117,7 @@ func (h *ChatHandler) List(c *gin.Context) {
 				Model:     item.Model,
 				Token:     tokenMap[item.ChatId],
 				MsgNum:    msgMap[item.ChatId],
+				Role:      roleMap[item.RoleId],
 				CreatedAt: item.CreatedAt.Unix(),
 			})
 		}
@@ -135,7 +152,7 @@ func (h *ChatHandler) Messages(c *gin.Context) {
 		return
 	}
 
-	session := h.db.Session(&gorm.Session{})
+	session := h.DB.Session(&gorm.Session{})
 	if data.Content != "" {
 		session = session.Where("content LIKE ?", "%"+data.Content+"%")
 	}
@@ -163,7 +180,7 @@ func (h *ChatHandler) Messages(c *gin.Context) {
 			userIds = append(userIds, item.UserId)
 		}
 		var users []model.User
-		h.db.Where("id IN ?", userIds).Find(&users)
+		h.DB.Where("id IN ?", userIds).Find(&users)
 		userMap := make(map[uint]string)
 		for _, user := range users {
 			userMap[user.Id] = user.Username
@@ -190,7 +207,7 @@ func (h *ChatHandler) History(c *gin.Context) {
 	chatId := c.Query("chat_id") // 会话 ID
 	var items []model.ChatMessage
 	var messages = make([]vo.HistoryMessage, 0)
-	res := h.db.Where("chat_id = ?", chatId).Find(&items)
+	res := h.DB.Where("chat_id = ?", chatId).Find(&items)
 	if res.Error != nil {
 		resp.ERROR(c, "No history message")
 		return
@@ -212,9 +229,14 @@ func (h *ChatHandler) History(c *gin.Context) {
 // RemoveChat 删除对话
 func (h *ChatHandler) RemoveChat(c *gin.Context) {
 	chatId := h.GetTrim(c, "chat_id")
-	tx := h.db.Begin()
+	if chatId == "" {
+		resp.ERROR(c, "请传入 ChatId")
+		return
+	}
+
+	tx := h.DB.Begin()
 	// 删除聊天记录
-	res := tx.Unscoped().Where("chat_id = ?", chatId).Delete(&model.ChatMessage{})
+	res := tx.Unscoped().Debug().Where("chat_id = ?", chatId).Delete(&model.ChatMessage{})
 	if res.Error != nil {
 		resp.ERROR(c, "failed to remove chat message")
 		return
@@ -235,7 +257,7 @@ func (h *ChatHandler) RemoveChat(c *gin.Context) {
 // RemoveMessage 删除聊天记录
 func (h *ChatHandler) RemoveMessage(c *gin.Context) {
 	id := h.GetInt(c, "id", 0)
-	tx := h.db.Unscoped().Delete(&model.ChatMessage{}, id)
+	tx := h.DB.Unscoped().Where("id = ?", id).Delete(&model.ChatMessage{})
 	if tx.Error != nil {
 		resp.ERROR(c, "更新数据库失败！")
 		return

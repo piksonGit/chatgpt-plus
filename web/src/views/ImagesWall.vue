@@ -13,7 +13,7 @@
       <div class="waterfall" :style="{ height:listBoxHeight + 'px' }" id="waterfall-box">
         <v3-waterfall v-if="imgType === 'mj'"
                       id="waterfall"
-                      :list="list"
+                      :list="data['mj']"
                       srcKey="img_thumb"
                       :gap="12"
                       :bottomGap="-5"
@@ -46,11 +46,26 @@
                   </template>
                 </el-image>
               </div>
-              <div class="prompt">
-                <span>{{ slotProp.item.prompt }}</span>
-                <el-icon class="copy-prompt" :data-clipboard-text="slotProp.item.prompt">
-                  <DocumentCopy/>
-                </el-icon>
+              <div class="opt">
+                <el-tooltip
+                    class="box-item"
+                    effect="light"
+                    content="复制提示词"
+                    placement="top"
+                >
+                  <el-icon class="copy-prompt-wall" :data-clipboard-text="slotProp.item.prompt">
+                    <DocumentCopy/>
+                  </el-icon>
+                </el-tooltip>
+
+                <el-tooltip
+                    class="box-item"
+                    effect="light"
+                    content="画同款"
+                    placement="top"
+                >
+                  <i class="iconfont icon-palette-pen" @click="drawSameMj(slotProp.item)"></i>
+                </el-tooltip>
               </div>
             </div>
           </template>
@@ -58,7 +73,7 @@
 
         <v3-waterfall v-else
                       id="waterfall"
-                      :list="list"
+                      :list="data['sd']"
                       srcKey="img_thumb"
                       :gap="12"
                       :bottomGap="-5"
@@ -86,13 +101,6 @@
                     </div>
                   </template>
                 </el-image>
-              </div>
-
-              <div class="prompt">
-                <span>{{ slotProp.item.prompt }}</span>
-                <el-icon class="copy-prompt" :data-clipboard-text="slotProp.item.prompt">
-                  <DocumentCopy/>
-                </el-icon>
               </div>
             </div>
           </template>
@@ -135,7 +143,7 @@
               </el-divider>
               <div class="prompt">
                 <span>{{ item.prompt }}</span>
-                <el-icon class="copy-prompt" :data-clipboard-text="item.prompt">
+                <el-icon class="copy-prompt-wall" :data-clipboard-text="item.prompt">
                   <DocumentCopy/>
                 </el-icon>
               </div>
@@ -148,7 +156,7 @@
               </el-divider>
               <div class="prompt">
                 <span>{{ item.params.negative_prompt }}</span>
-                <el-icon class="copy-prompt" :data-clipboard-text="item.params.negative_prompt">
+                <el-icon class="copy-prompt-wall" :data-clipboard-text="item.params.negative_prompt">
                   <DocumentCopy/>
                 </el-icon>
               </div>
@@ -223,7 +231,7 @@
             </div>
 
             <div class="copy-params">
-              <el-button type="primary" round @click="copyParams(item)">画一张同款的</el-button>
+              <el-button type="primary" round @click="drawSameSd(item)">画一张同款的</el-button>
             </div>
 
           </div>
@@ -235,14 +243,17 @@
 </template>
 
 <script setup>
-import {nextTick, onMounted, ref} from "vue"
+import {nextTick, onMounted, onUnmounted, ref} from "vue"
 import {DocumentCopy, Picture} from "@element-plus/icons-vue";
 import {httpGet} from "@/utils/http";
 import {ElMessage} from "element-plus";
 import Clipboard from "clipboard";
 import {useRouter} from "vue-router";
 
-const list = ref([])
+const data = ref({
+  "mj": [],
+  "sd": []
+})
 const loading = ref(true)
 const isOver = ref(false)
 const imgType = ref("mj") // 图片类别
@@ -264,7 +275,7 @@ window.onresize = () => {
 }
 
 const page = ref(0)
-const pageSize = ref(20)
+const pageSize = ref(15)
 // 获取下一页数据
 const getNext = () => {
   if (isOver.value) {
@@ -273,8 +284,8 @@ const getNext = () => {
 
   loading.value = true
   page.value = page.value + 1
-  const url = imgType.value === "mj" ? "/api/mj/jobs" : "/api/sd/jobs"
-  httpGet(`${url}?status=1&page=${page.value}&page_size=${pageSize.value}&publish=true`).then(res => {
+  const url = imgType.value === "mj" ? "/api/mj/imgWall" : "/api/sd/imgWall"
+  httpGet(`${url}?page=${page.value}&page_size=${pageSize.value}`).then(res => {
     loading.value = false
     if (res.data.length === 0) {
       isOver.value = true
@@ -286,15 +297,15 @@ const getNext = () => {
     for (let i = 0; i < imageList.length; i++) {
       imageList[i]["img_thumb"] = imageList[i]["img_url"] + "?imageView2/4/w/300/h/0/q/75"
     }
-    if (list.value.length === 0) {
-      list.value = imageList
+    if (data.value[imgType.value].length === 0) {
+      data.value[imgType.value] = imageList
       return
     }
 
     if (imageList.length < pageSize.value) {
       isOver.value = true
     }
-    list.value = list.value.concat(imageList)
+    data.value[imgType.value] = data.value[imgType.value].concat(imageList)
 
   }).catch(e => {
     ElMessage.error("获取图片失败：" + e.message)
@@ -303,21 +314,29 @@ const getNext = () => {
 
 getNext()
 
+const clipboard = ref(null)
 onMounted(() => {
-  const clipboard = new Clipboard('.copy-prompt');
-  clipboard.on('success', () => {
+  clipboard.value = new Clipboard('.copy-prompt-wall');
+  clipboard.value.on('success', () => {
     ElMessage.success("复制成功！");
   })
 
-  clipboard.on('error', () => {
+  clipboard.value.on('error', () => {
     ElMessage.error('复制失败！');
   })
+})
+
+onUnmounted(() => {
+  clipboard.value.destroy()
 })
 
 const changeImgType = () => {
   document.getElementById('waterfall-box').scrollTo(0, 0)
   page.value = 0
-  list.value = []
+  data.value = {
+    "mj": [],
+    "sd": []
+  }
   loading.value = true
   isOver.value = false
   nextTick(() => getNext())
@@ -330,10 +349,13 @@ const showTask = (row) => {
 
 
 const router = useRouter()
-const copyParams = (row) => {
+const drawSameSd = (row) => {
   router.push({name: "image-sd", params: {copyParams: JSON.stringify(row.params)}})
 }
 
+const drawSameMj = (row) => {
+  router.push({name: "image-mj", params: {prompt: row.prompt}})
+}
 </script>
 
 <style lang="stylus">

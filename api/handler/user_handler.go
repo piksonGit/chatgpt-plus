@@ -21,7 +21,6 @@ import (
 
 type UserHandler struct {
 	BaseHandler
-	db       *gorm.DB
 	searcher *xdb.Searcher
 	redis    *redis.Client
 }
@@ -31,15 +30,14 @@ func NewUserHandler(
 	db *gorm.DB,
 	searcher *xdb.Searcher,
 	client *redis.Client) *UserHandler {
-	handler := &UserHandler{db: db, searcher: searcher, redis: client}
-	handler.App = app
-	return handler
+	return &UserHandler{BaseHandler: BaseHandler{DB: db, App: app}, searcher: searcher, redis: client}
 }
 
 // Register user register
 func (h *UserHandler) Register(c *gin.Context) {
 	// parameters process
 	var data struct {
+		RegWay     string `json:"reg_way"`
 		Username   string `json:"username"`
 		Password   string `json:"password"`
 		Code       string `json:"code"`
@@ -57,8 +55,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	// 检查验证码
 	var key string
-	if utils.ContainsStr(h.App.SysConfig.RegisterWays, "email") ||
-		utils.ContainsStr(h.App.SysConfig.RegisterWays, "mobile") {
+	if data.RegWay == "email" || data.RegWay == "mobile" || data.Code != "" {
 		key = CodeStorePrefix + data.Username
 		code, err := h.redis.Get(c, key).Result()
 		if err != nil || code != data.Code {
@@ -70,7 +67,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 	// 验证邀请码
 	inviteCode := model.InviteCode{}
 	if data.InviteCode != "" {
-		res := h.db.Where("code = ?", data.InviteCode).First(&inviteCode)
+		res := h.DB.Where("code = ?", data.InviteCode).First(&inviteCode)
 		if res.Error != nil {
 			resp.ERROR(c, "无效的邀请码")
 			return
@@ -79,8 +76,8 @@ func (h *UserHandler) Register(c *gin.Context) {
 
 	// check if the username is exists
 	var item model.User
-	res := h.db.Where("username = ?", data.Username).First(&item)
-	if res.RowsAffected > 0 {
+	res := h.DB.Where("username = ?", data.Username).First(&item)
+	if item.Id > 0 {
 		resp.ERROR(c, "该用户名已经被注册")
 		return
 	}
@@ -95,18 +92,10 @@ func (h *UserHandler) Register(c *gin.Context) {
 		Status:     true,
 		ChatRoles:  utils.JsonEncode([]string{"gpt"}),               // 默认只订阅通用助手角色
 		ChatModels: utils.JsonEncode(h.App.SysConfig.DefaultModels), // 默认开通的模型
-		ChatConfig: utils.JsonEncode(types.UserChatConfig{
-			ApiKeys: map[types.Platform]string{
-				types.OpenAI:  "",
-				types.Azure:   "",
-				types.ChatGLM: "",
-			},
-		}),
-		Calls:    h.App.SysConfig.InitChatCalls,
-		ImgCalls: h.App.SysConfig.InitImgCalls,
+		Power:      h.App.SysConfig.InitPower,
 	}
 
-	res = h.db.Create(&user)
+	res = h.DB.Create(&user)
 	if res.Error != nil {
 		resp.ERROR(c, "保存数据失败")
 		logger.Error(res.Error)
@@ -116,21 +105,32 @@ func (h *UserHandler) Register(c *gin.Context) {
 	// 记录邀请关系
 	if data.InviteCode != "" {
 		// 增加邀请数量
-		h.db.Model(&model.InviteCode{}).Where("code = ?", data.InviteCode).UpdateColumn("reg_num", gorm.Expr("reg_num + ?", 1))
-		if h.App.SysConfig.InviteChatCalls > 0 {
-			h.db.Model(&model.User{}).Where("id = ?", inviteCode.UserId).UpdateColumn("calls", gorm.Expr("calls + ?", h.App.SysConfig.InviteChatCalls))
-		}
-		if h.App.SysConfig.InviteImgCalls > 0 {
-			h.db.Model(&model.User{}).Where("id = ?", inviteCode.UserId).UpdateColumn("img_calls", gorm.Expr("img_calls + ?", h.App.SysConfig.InviteImgCalls))
+		h.DB.Model(&model.InviteCode{}).Where("code = ?", data.InviteCode).UpdateColumn("reg_num", gorm.Expr("reg_num + ?", 1))
+		if h.App.SysConfig.InvitePower > 0 {
+			h.DB.Model(&model.User{}).Where("id = ?", inviteCode.UserId).UpdateColumn("power", gorm.Expr("power + ?", h.App.SysConfig.InvitePower))
+			// 记录邀请算力充值日志
+			var inviter model.User
+			h.DB.Where("id", inviteCode.UserId).First(&inviter)
+			h.DB.Create(&model.PowerLog{
+				UserId:    inviter.Id,
+				Username:  inviter.Username,
+				Type:      types.PowerInvite,
+				Amount:    h.App.SysConfig.InvitePower,
+				Balance:   inviter.Power,
+				Mark:      types.PowerAdd,
+				Model:     "",
+				Remark:    fmt.Sprintf("邀请用户注册奖励，金额：%d，邀请码：%s，新用户：%s", h.App.SysConfig.InvitePower, inviteCode.Code, user.Username),
+				CreatedAt: time.Now(),
+			})
 		}
 
 		// 添加邀请记录
-		h.db.Create(&model.InviteLog{
+		h.DB.Create(&model.InviteLog{
 			InviterId:  inviteCode.UserId,
 			UserId:     user.Id,
 			Username:   user.Username,
 			InviteCode: inviteCode.Code,
-			Reward:     utils.JsonEncode(types.InviteReward{ChatCalls: h.App.SysConfig.InviteChatCalls, ImgCalls: h.App.SysConfig.InviteImgCalls}),
+			Remark:     fmt.Sprintf("奖励 %d 算力", h.App.SysConfig.InvitePower),
 		})
 	}
 
@@ -166,7 +166,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 		return
 	}
 	var user model.User
-	res := h.db.Where("username = ?", data.Username).First(&user)
+	res := h.DB.Where("username = ?", data.Username).First(&user)
 	if res.Error != nil {
 		resp.ERROR(c, "用户名不存在")
 		return
@@ -186,9 +186,9 @@ func (h *UserHandler) Login(c *gin.Context) {
 	// 更新最后登录时间和IP
 	user.LastLoginIp = c.ClientIP()
 	user.LastLoginAt = time.Now().Unix()
-	h.db.Model(&user).Updates(user)
+	h.DB.Model(&user).Updates(user)
 
-	h.db.Create(&model.UserLoginLog{
+	h.DB.Create(&model.UserLoginLog{
 		UserId:       user.Id,
 		Username:     user.Username,
 		LoginIp:      c.ClientIP(),
@@ -233,7 +233,7 @@ func (h *UserHandler) Logout(c *gin.Context) {
 
 // Session 获取/验证会话
 func (h *UserHandler) Session(c *gin.Context) {
-	user, err := utils.GetLoginUser(c, h.db)
+	user, err := h.GetLoginUser(c)
 	if err == nil {
 		var userVo vo.User
 		err := utils.CopyObject(user, &userVo)
@@ -249,27 +249,23 @@ func (h *UserHandler) Session(c *gin.Context) {
 }
 
 type userProfile struct {
-	Id          uint                 `json:"id"`
-	Nickname    string               `json:"nickname"`
-	Username    string               `json:"username"`
-	Avatar      string               `json:"avatar"`
-	ChatConfig  types.UserChatConfig `json:"chat_config"`
-	Calls       int                  `json:"calls"`
-	ImgCalls    int                  `json:"img_calls"`
-	TotalTokens int64                `json:"total_tokens"`
-	Tokens      int64                `json:"tokens"`
-	ExpiredTime int64                `json:"expired_time"`
-	Vip         bool                 `json:"vip"`
+	Id          uint   `json:"id"`
+	Nickname    string `json:"nickname"`
+	Username    string `json:"username"`
+	Avatar      string `json:"avatar"`
+	Power       int    `json:"power"`
+	ExpiredTime int64  `json:"expired_time"`
+	Vip         bool   `json:"vip"`
 }
 
 func (h *UserHandler) Profile(c *gin.Context) {
-	user, err := utils.GetLoginUser(c, h.db)
+	user, err := h.GetLoginUser(c)
 	if err != nil {
 		resp.NotAuth(c)
 		return
 	}
 
-	h.db.First(&user, user.Id)
+	h.DB.First(&user, user.Id)
 	var profile userProfile
 	err = utils.CopyObject(user, &profile)
 	if err != nil {
@@ -289,15 +285,15 @@ func (h *UserHandler) ProfileUpdate(c *gin.Context) {
 		return
 	}
 
-	user, err := utils.GetLoginUser(c, h.db)
+	user, err := h.GetLoginUser(c)
 	if err != nil {
 		resp.NotAuth(c)
 		return
 	}
-	h.db.First(&user, user.Id)
+	h.DB.First(&user, user.Id)
 	user.Avatar = data.Avatar
 	user.Nickname = data.Nickname
-	res := h.db.Updates(&user)
+	res := h.DB.Updates(&user)
 	if res.Error != nil {
 		resp.ERROR(c, "更新用户信息失败")
 		return
@@ -322,21 +318,21 @@ func (h *UserHandler) UpdatePass(c *gin.Context) {
 		return
 	}
 
-	user, err := utils.GetLoginUser(c, h.db)
+	user, err := h.GetLoginUser(c)
 	if err != nil {
 		resp.NotAuth(c)
 		return
 	}
 
 	password := utils.GenPassword(data.OldPass, user.Salt)
-	logger.Info(user.Salt, ",", user.Password, ",", password, ",", data.OldPass)
+	logger.Debugf(user.Salt, ",", user.Password, ",", password, ",", data.OldPass)
 	if password != user.Password {
 		resp.ERROR(c, "原密码错误")
 		return
 	}
 
 	newPass := utils.GenPassword(data.Password, user.Salt)
-	res := h.db.Model(&user).UpdateColumn("password", newPass)
+	res := h.DB.Model(&user).UpdateColumn("password", newPass)
 	if res.Error != nil {
 		logger.Error("更新数据库失败: ", res.Error)
 		resp.ERROR(c, "更新数据库失败")
@@ -359,7 +355,7 @@ func (h *UserHandler) ResetPass(c *gin.Context) {
 	}
 
 	var user model.User
-	res := h.db.Where("username", data.Username).First(&user)
+	res := h.DB.Where("username", data.Username).First(&user)
 	if res.Error != nil {
 		resp.ERROR(c, "用户不存在！")
 		return
@@ -375,7 +371,7 @@ func (h *UserHandler) ResetPass(c *gin.Context) {
 
 	password := utils.GenPassword(data.Password, user.Salt)
 	user.Password = password
-	res = h.db.Updates(&user)
+	res = h.DB.Updates(&user)
 	if res.Error != nil {
 		resp.ERROR(c)
 	} else {
@@ -405,19 +401,19 @@ func (h *UserHandler) BindUsername(c *gin.Context) {
 
 	// 检查手机号是否被其他账号绑定
 	var item model.User
-	res := h.db.Where("username = ?", data.Username).First(&item)
+	res := h.DB.Where("username = ?", data.Username).First(&item)
 	if res.Error == nil {
 		resp.ERROR(c, "该账号已经被其他账号绑定")
 		return
 	}
 
-	user, err := utils.GetLoginUser(c, h.db)
+	user, err := h.GetLoginUser(c)
 	if err != nil {
 		resp.NotAuth(c)
 		return
 	}
 
-	res = h.db.Model(&user).UpdateColumn("username", data.Username)
+	res = h.DB.Model(&user).UpdateColumn("username", data.Username)
 	if res.Error != nil {
 		resp.ERROR(c, "更新数据库失败")
 		return

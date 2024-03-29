@@ -1,155 +1,163 @@
 <template>
-  <div class="member custom-scroll">
-    <div class="title">
-      会员充值中心
-    </div>
-    <div class="inner" :style="{height: listBoxHeight + 'px'}">
-      <el-row :gutter="20">
-        <el-col :span="7">
-          <div class="user-profile">
-            <user-profile/>
-
-            <el-row class="user-opt" :gutter="20">
-              <el-col :span="12">
-                <el-button type="primary" @click="showPasswordDialog = true">修改密码</el-button>
-              </el-col>
-              <el-col :span="12">
-                <el-button type="primary" @click="showBindMobileDialog = true">更改账号</el-button>
-              </el-col>
-              <el-col :span="12">
-                <el-button type="primary" v-if="enableReward" @click="showRewardDialog = true">加入众筹</el-button>
-              </el-col>
-              <el-col :span="12">
-                <el-button type="primary" v-if="enableReward" @click="showRewardVerifyDialog = true">众筹核销
-                </el-button>
-              </el-col>
-
-              <el-col :span="24" style="padding-top: 30px">
-                <el-button type="danger" round @click="logout">退出登录</el-button>
-              </el-col>
-            </el-row>
-          </div>
-        </el-col>
-
-        <el-col :span="17">
-          <div class="product-box">
-            <div class="info" v-if="orderPayInfoText !== ''">
-              <el-alert type="info" show-icon :closable="false" effect="dark">
-                <strong>说明:</strong> {{ orderPayInfoText }}
-              </el-alert>
-            </div>
-
-            <ItemList :items="list" v-if="list.length > 0" :gap="30" :width="240">
-              <template #default="scope">
-                <div class="product-item" :style="{width: scope.width+'px'}">
-                  <div class="image-container">
-                    <el-image :src="vipImg" fit="cover"/>
-                  </div>
-                  <div class="product-title">
-                    <span class="name">{{ scope.item.name }}</span>
-                  </div>
-                  <div class="product-info">
-                    <div class="info-line">
-                      <span class="label">商品原价：</span>
-                      <span class="price">￥{{ scope.item.price }}</span>
-                    </div>
-                    <div class="info-line">
-                      <span class="label">促销立减：</span>
-                      <span class="price">￥{{ scope.item.discount }}</span>
-                    </div>
-                    <div class="info-line">
-                      <span class="label">有效期：</span>
-                      <span class="expire" v-if="scope.item.days > 0">{{ scope.item.days }}天</span>
-                      <span class="expire" v-else>长期有效</span>
-                    </div>
-
-                    <div class="pay-way">
-                      <el-button type="primary" @click="alipay(scope.item)" size="small" v-if="payWays['alipay']">
-                        <i class="iconfont icon-alipay"></i> 支付宝
-                      </el-button>
-                      <el-button type="success" @click="huPiPay(scope.item)" size="small" v-if="payWays['hupi']">
-                        <span v-if="payWays['hupi']['name'] === 'wechat'"><i class="iconfont icon-wechat-pay"></i> 微信</span>
-                        <span v-else><i class="iconfont icon-alipay"></i> 支付宝</span>
-                      </el-button>
-
-                      <el-button type="success" @click="PayJs(scope.item)" size="small" v-if="payWays['payjs']">
-                        <span><i class="iconfont icon-wechat-pay"></i> 微信</span>
-                      </el-button>
-                    </div>
-                  </div>
-                </div>
-              </template>
-            </ItemList>
-
-            <h2 class="headline">消费账单</h2>
-
-            <div class="user-order">
-              <user-order v-if="isLogin"/>
-            </div>
-          </div>
-        </el-col>
-      </el-row>
-
-    </div>
-
-    <login-dialog :show="showLoginDialog" @hide="showLoginDialog = false"/>
-
-    <password-dialog v-if="isLogin" :show="showPasswordDialog" @hide="showPasswordDialog = false"
-                     @logout="logout"/>
-
-    <bind-mobile v-if="isLogin" :show="showBindMobileDialog" :username="user.username"
-                 @hide="showBindMobileDialog = false"/>
-
-    <reward-verify v-if="isLogin" :show="showRewardVerifyDialog" @hide="showRewardVerifyDialog = false"/>
-
-    <el-dialog
-        v-model="showRewardDialog"
-        :show-close="true"
-        width="400px"
-        title="参与众筹"
-    >
-      <el-alert type="info" :closable="false">
-        <div style="font-size: 14px">您好，众筹 9.9元，就可以兑换 100 次对话，以此来覆盖我们的 OpenAI
-          账单和服务器的费用。<strong
-              style="color: #f56c6c">由于本人没有开通微信支付，付款后请凭借转账单号,点击【众筹核销】按钮手动核销。</strong>
-        </div>
-      </el-alert>
-      <div style="text-align: center;padding-top: 10px;">
-        <el-image v-if="enableReward" :src="rewardImg"/>
+  <div>
+    <div class="member custom-scroll">
+      <div class="title">
+        会员充值中心
       </div>
-    </el-dialog>
+      <div class="inner" :style="{height: listBoxHeight + 'px'}">
+        <el-row :gutter="20">
+          <el-col :span="7">
+            <div class="user-profile">
+              <user-profile/>
 
-    <el-dialog
-        v-model="showPayDialog"
-        :close-on-click-modal="false"
-        :show-close="true"
-        :width="400"
-        @close="closeOrder"
-        title="充值订单支付">
-      <div class="pay-container">
-        <div class="count-down">
-          <count-down :second="orderTimeout" @timeout="refreshPayCode" ref="countDownRef"/>
-        </div>
+              <el-row class="user-opt" :gutter="20">
+                <el-col :span="12">
+                  <el-button type="primary" @click="showPasswordDialog = true">修改密码</el-button>
+                </el-col>
+                <el-col :span="12">
+                  <el-button type="primary" @click="showBindMobileDialog = true">更改账号</el-button>
+                </el-col>
+                <el-col :span="12">
+                  <el-button type="primary" v-if="enableReward" @click="showRewardDialog = true">加入众筹</el-button>
+                </el-col>
+                <el-col :span="12">
+                  <el-button type="primary" v-if="enableReward" @click="showRewardVerifyDialog = true">众筹核销
+                  </el-button>
+                </el-col>
 
-        <div class="pay-qrcode" v-loading="loading">
-          <el-image :src="qrcode"/>
-        </div>
+                <el-col :span="24" style="padding-top: 30px" v-if="isLogin">
+                  <el-button type="danger" round @click="logout">退出登录</el-button>
+                </el-col>
+              </el-row>
+            </div>
+          </el-col>
 
-        <div class="tip success" v-if="text !== ''">
-          <el-icon>
-            <SuccessFilled/>
-          </el-icon>
-          <span class="text">{{ text }}</span>
-        </div>
-        <div class="tip" v-else>
-          <el-icon>
-            <InfoFilled/>
-          </el-icon>
-          <span class="text">请打开手机{{ payName }}扫码支付</span>
-        </div>
+          <el-col :span="17">
+            <div class="product-box">
+              <div class="info" v-if="orderPayInfoText !== ''">
+                <el-alert type="success" show-icon :closable="false" effect="dark">
+                  <strong>说明:</strong> {{ vipInfoText }}
+                </el-alert>
+              </div>
+
+              <ItemList :items="list" v-if="list.length > 0" :gap="30" :width="240">
+                <template #default="scope">
+                  <div class="product-item" :style="{width: scope.width+'px'}">
+                    <div class="image-container">
+                      <el-image :src="vipImg" fit="cover"/>
+                    </div>
+                    <div class="product-title">
+                      <span class="name">{{ scope.item.name }}</span>
+                    </div>
+                    <div class="product-info">
+                      <div class="info-line">
+                        <span class="label">商品原价：</span>
+                        <span class="price">￥{{ scope.item.price }}</span>
+                      </div>
+                      <div class="info-line">
+                        <span class="label">促销立减：</span>
+                        <span class="price">￥{{ scope.item.discount }}</span>
+                      </div>
+                      <div class="info-line">
+                        <span class="label">有效期：</span>
+                        <span class="expire" v-if="scope.item.days > 0">{{ scope.item.days }}天</span>
+                        <span class="expire" v-else>长期有效</span>
+                      </div>
+
+                      <div class="info-line">
+                        <span class="label">算力值：</span>
+                        <span class="power" v-if="scope.item.power > 0">{{ scope.item.power }}</span>
+                        <span class="power" v-else>{{ vipMonthPower }}</span>
+                      </div>
+
+                      <div class="pay-way">
+                        <el-button type="primary" @click="alipay(scope.item)" size="small" v-if="payWays['alipay']">
+                          <i class="iconfont icon-alipay"></i> 支付宝
+                        </el-button>
+                        <el-button type="success" @click="huPiPay(scope.item)" size="small" v-if="payWays['hupi']">
+                          <span v-if="payWays['hupi']['name'] === 'wechat'"><i class="iconfont icon-wechat-pay"></i> 微信</span>
+                          <span v-else><i class="iconfont icon-alipay"></i> 支付宝</span>
+                        </el-button>
+
+                        <el-button type="success" @click="PayJs(scope.item)" size="small" v-if="payWays['payjs']">
+                          <span><i class="iconfont icon-wechat-pay"></i> 微信</span>
+                        </el-button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </ItemList>
+
+              <h2 class="headline">消费账单</h2>
+
+              <div class="user-order">
+                <user-order v-if="isLogin"/>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+
       </div>
 
-    </el-dialog>
+      <password-dialog v-if="isLogin" :show="showPasswordDialog" @hide="showPasswordDialog = false"
+                       @logout="logout"/>
+
+      <bind-mobile v-if="isLogin" :show="showBindMobileDialog" :username="user.username"
+                   @hide="showBindMobileDialog = false"/>
+
+      <reward-verify v-if="isLogin" :show="showRewardVerifyDialog" @hide="showRewardVerifyDialog = false"/>
+
+      <el-dialog
+          v-model="showRewardDialog"
+          :show-close="true"
+          width="400px"
+          title="参与众筹"
+      >
+        <el-alert type="info" :closable="false">
+          <div style="font-size: 14px">您好，目前每单位算力众筹价格为 <strong style="color: #f56c6c">{{ powerPrice }}
+          </strong>元。
+            由于本人没有开通微信支付，付款后请凭借转账单号,点击【众筹核销】按钮手动核销。
+          </div>
+        </el-alert>
+        <div style="text-align: center;padding-top: 10px;">
+          <el-image v-if="enableReward" :src="rewardImg"/>
+        </div>
+      </el-dialog>
+
+      <el-dialog
+          v-model="showPayDialog"
+          :close-on-click-modal="false"
+          :show-close="true"
+          :width="400"
+          @close="closeOrder"
+          :title="'实付金额：￥'+amount">
+        <div class="pay-container">
+          <div class="count-down">
+            <count-down :second="orderTimeout" @timeout="refreshPayCode" ref="countDownRef"/>
+          </div>
+
+          <div class="pay-qrcode" v-loading="loading">
+            <el-image :src="qrcode"/>
+          </div>
+
+          <div class="tip success" v-if="text !== ''">
+            <el-icon>
+              <SuccessFilled/>
+            </el-icon>
+            <span class="text">{{ text }}</span>
+          </div>
+          <div class="tip" v-else>
+            <el-icon>
+              <InfoFilled/>
+            </el-icon>
+            <span class="text">请打开手机{{ payName }}扫码支付</span>
+          </div>
+        </div>
+
+      </el-dialog>
+    </div>
+
+    <login-dialog :show="showLoginDialog" @hide="showLoginDialog = false" @success="loginSuccess"/>
   </div>
 </template>
 
@@ -192,32 +200,40 @@ const countDownRef = ref(null)
 const orderTimeout = ref(1800)
 const loading = ref(true)
 const orderPayInfoText = ref("")
+const vipMonthPower = ref(0)
+const powerPrice = ref(0)
 
 const payWays = ref({})
+const amount = ref(0)
 const payName = ref("支付宝")
 const curPay = ref("alipay") // 当前支付方式
+const vipInfoText = ref("")
 
 
 onMounted(() => {
   checkSession().then(_user => {
     user.value = _user
     isLogin.value = true
-    httpGet("/api/product/list").then((res) => {
-      list.value = res.data
-    }).catch(e => {
-      ElMessage.error("获取产品套餐失败：" + e.message)
-    })
   }).catch(() => {
-    router.push("/login")
+    showLoginDialog.value = true
   })
 
-  httpGet("/api/admin/config/get?key=system").then(res => {
+  httpGet("/api/product/list").then((res) => {
+    list.value = res.data
+  }).catch(e => {
+    ElMessage.error("获取产品套餐失败：" + e.message)
+  })
+
+  httpGet("/api/config/get?key=system").then(res => {
     rewardImg.value = res.data['reward_img']
     enableReward.value = res.data['enabled_reward']
     orderPayInfoText.value = res.data['order_pay_info_text']
     if (res.data['order_pay_timeout'] > 0) {
       orderTimeout.value = res.data['order_pay_timeout']
     }
+    vipMonthPower.value = res.data['vip_month_power']
+    powerPrice.value = res.data['power_price']
+    vipInfoText.value = res.data['vip_info_text']
   }).catch(e => {
     ElMessage.error("获取系统配置失败：" + e.message)
   })
@@ -263,10 +279,12 @@ const genPayQrcode = () => {
 const alipay = (row) => {
   payName.value = "支付宝"
   curPay.value = "alipay"
-  if (!user.value.id) {
+  amount.value = (row.price - row.discount).toFixed(2)
+  if (!isLogin.value) {
     showLoginDialog.value = true
     return
   }
+
   if (row) {
     curPayProduct.value = row
   }
@@ -277,10 +295,12 @@ const alipay = (row) => {
 const huPiPay = (row) => {
   payName.value = payWays.value["hupi"]["name"] === "wechat" ? '微信' : '支付宝'
   curPay.value = "hupi"
-  if (!user.value.id) {
+  amount.value = (row.price - row.discount).toFixed(2)
+  if (!isLogin.value) {
     showLoginDialog.value = true
     return
   }
+
   if (row) {
     curPayProduct.value = row
   }
@@ -291,10 +311,12 @@ const huPiPay = (row) => {
 const PayJs = (row) => {
   payName.value = '微信'
   curPay.value = "payjs"
-  if (!user.value.id) {
+  amount.value = (row.price - row.discount).toFixed(2)
+  if (!isLogin.value) {
     showLoginDialog.value = true
     return
   }
+
   if (row) {
     curPayProduct.value = row
   }
@@ -337,195 +359,13 @@ const closeOrder = () => {
   activeOrderNo.value = ''
 }
 
+const loginSuccess = () => {
+  location.reload()
+}
+
 </script>
 
 <style lang="stylus">
 @import "@/assets/css/custom-scroll.styl"
-.member {
-  background-color: #282c34;
-  height 100vh
-
-  .el-dialog {
-    .el-dialog__body {
-      padding-top 10px
-
-      .pay-container {
-        .count-down {
-          display flex
-          justify-content center
-        }
-
-        .pay-qrcode {
-          display flex
-          justify-content center
-
-          .el-image {
-            width 360px;
-            height 360px;
-          }
-        }
-
-        .tip {
-          display flex
-          justify-content center
-
-          .el-icon {
-            font-size 24px
-          }
-
-          .text {
-            font-size: 16px
-            margin-left 10px
-          }
-        }
-
-        .tip.success {
-          color #07c160
-        }
-      }
-    }
-  }
-
-  .title {
-    text-align center
-    background-color #25272d
-    font-size 24px
-    color #ffffff
-    padding 10px
-    border-bottom 1px solid #3c3c3c
-  }
-
-  .inner {
-    color #ffffff
-    padding 15px 0 15px 15px;
-    overflow-x hidden
-    overflow-y visible
-
-    .user-profile {
-      padding 10px 20px 20px 20px
-      background-color #393F4A
-      color #ffffff
-      border-radius 10px
-      height 100vh
-
-      .el-form-item__label {
-        color #ffffff
-        justify-content start
-      }
-
-      .user-opt {
-        .el-col {
-          padding 10px
-
-          .el-button {
-            width 100%
-          }
-        }
-      }
-    }
-
-
-    .product-box {
-      .info {
-        .el-alert__description {
-          font-size 14px !important
-          margin 0
-        }
-        padding 10px 20px 20px 0
-      }
-
-      .list-box {
-        .product-item {
-          border 1px solid #666666
-          border-radius 6px
-          overflow hidden
-          cursor pointer
-          transition: all 0.3s ease; /* 添加过渡效果 */
-
-          .image-container {
-            display flex
-            justify-content center
-
-            .el-image {
-              padding 6px
-
-              .el-image__inner {
-                border-radius 10px
-              }
-            }
-          }
-
-          .product-title {
-            display flex
-            padding 10px
-
-            .name {
-              width 100%
-              text-align center
-              font-size 16px
-              font-weight bold
-              color #47fff1
-            }
-          }
-
-          .product-info {
-            padding 10px 20px
-            font-size 14px
-            color #999999
-
-            .info-line {
-              display flex
-              width 100%
-              padding 5px 0
-
-              .label {
-                display flex
-                width 100%
-              }
-
-              .price, .expire {
-                display flex
-                width 90px
-                justify-content right
-              }
-
-              .price {
-                color #f56c6c
-              }
-
-              .expire {
-                color #409eff
-              }
-            }
-
-
-            .pay-way {
-              padding 10px 0
-              display flex
-              justify-content: space-between
-
-              .iconfont {
-                margin-right 5px
-              }
-            }
-          }
-
-          &:hover {
-            box-shadow: 0 0 10px rgba(71, 255, 241, 0.6); /* 添加阴影效果 */
-            transform: translateY(-10px); /* 向上移动10像素 */
-          }
-        }
-      }
-
-      .headline {
-        padding 0 20px 20px 0
-      }
-
-      .user-order {
-        padding 0 20px 20px 0
-      }
-    }
-  }
-
-}
+@import "@/assets/css/member.styl"
 </style>

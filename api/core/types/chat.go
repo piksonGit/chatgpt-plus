@@ -54,10 +54,14 @@ type ChatSession struct {
 }
 
 type ChatModel struct {
-	Id       uint     `json:"id"`
-	Platform Platform `json:"platform"`
-	Value    string   `json:"value"`
-	Weight   int      `json:"weight"`
+	Id          uint     `json:"id"`
+	Platform    Platform `json:"platform"`
+	Name        string   `json:"name"`
+	Value       string   `json:"value"`
+	Power       int      `json:"power"`
+	MaxTokens   int      `json:"max_tokens"`  // 最大响应长度
+	MaxContext  int      `json:"max_context"` // 最大上下文长度
+	Temperature float32  `json:"temperature"` // 模型温度
 }
 
 type ApiError struct {
@@ -72,23 +76,36 @@ type ApiError struct {
 const PromptMsg = "prompt" // prompt message
 const ReplyMsg = "reply"   // reply message
 
-var ModelToTokens = map[string]int{
-	"gpt-3.5-turbo":     4096,
-	"gpt-3.5-turbo-16k": 16384,
-	"gpt-4":             8192,
-	"gpt-4-32k":         32768,
-	"chatglm_pro":       32768, // 清华智普
-	"chatglm_std":       16384,
-	"chatglm_lite":      4096,
-	"ernie_bot_turbo":   8192, // 文心一言
-	"general":           8192, // 科大讯飞
-	"general2":          8192,
-	"general3":          8192,
+// PowerType 算力日志类型
+type PowerType int
+
+const (
+	PowerRecharge = PowerType(1) // 充值
+	PowerConsume  = PowerType(2) // 消费
+	PowerRefund   = PowerType(3) // 任务（SD,MJ）执行失败，退款
+	PowerInvite   = PowerType(4) // 邀请奖励
+	PowerReward   = PowerType(5) // 众筹
+	PowerGift     = PowerType(6) // 系统赠送
+)
+
+func (t PowerType) String() string {
+	switch t {
+	case PowerRecharge:
+		return "充值"
+	case PowerConsume:
+		return "消费"
+	case PowerRefund:
+		return "退款"
+	case PowerReward:
+		return "众筹"
+
+	}
+	return "其他"
 }
 
-func GetModelMaxToken(model string) int {
-	if token, ok := ModelToTokens[model]; ok {
-		return token
-	}
-	return 4096
-}
+type PowerMark int
+
+const (
+	PowerSub = PowerMark(0)
+	PowerAdd = PowerMark(1)
+)

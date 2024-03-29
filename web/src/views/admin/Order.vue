@@ -2,6 +2,14 @@
   <div class="container order" v-loading="loading">
     <div class="handle-box">
       <el-input v-model="query.order_no" placeholder="订单号" class="handle-input mr10"></el-input>
+      <el-select v-model="query.status" placeholder="订单状态" style="width: 100px">
+        <el-option
+            v-for="item in orderStatus"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+        />
+      </el-select>
       <el-date-picker
           v-model="query.pay_time"
           type="daterange"
@@ -9,7 +17,7 @@
           end-placeholder="结束日期"
           format="YYYY-MM-DD"
           value-format="YYYY-MM-DD"
-          style="margin-right: 10px;width: 200px; position: relative;top:3px;"
+          style="margin: 0 10px;width: 200px; position: relative;top:3px;"
       />
       <el-button type="primary" :icon="Search" @click="fetchData">搜索</el-button>
     </div>
@@ -20,9 +28,9 @@
         <el-table-column prop="username" label="下单用户"/>
         <el-table-column prop="subject" label="产品名称"/>
         <el-table-column prop="amount" label="订单金额"/>
-        <el-table-column label="调用次数">
+        <el-table-column label="充值算力">
           <template #default="scope">
-            <span>{{ scope.row.remark?.calls }}</span>
+            <span>{{ scope.row.remark?.power }}</span>
           </template>
         </el-table-column>
 
@@ -74,11 +82,16 @@ import {Search} from "@element-plus/icons-vue";
 
 // 变量定义
 const items = ref([])
-const query = ref({order_no: "", pay_time: []})
+const query = ref({order_no: "", pay_time: [], status: -1})
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(15)
 const loading = ref(true)
+const orderStatus = ref([
+  {value: -1, label: "全部"},
+  {value: 0, label: "未支付"},
+  {value: 2, label: "已支付"},
+])
 
 onMounted(() => {
   fetchData()
