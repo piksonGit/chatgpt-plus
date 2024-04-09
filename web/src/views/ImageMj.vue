@@ -3,7 +3,7 @@
     <div class="inner custom-scroll">
       <div class="mj-box">
         <h2>MidJourney 创作中心</h2>
-
+        <el-alert title="生成图片需30算力/次，消耗大且不可撤回，请谨慎操作！"/>
         <div class="mj-params" :style="{ height: mjBoxHeight + 'px' }">
           <el-form :model="params" label-width="80px" label-position="left">
             <div class="param-line pt">
