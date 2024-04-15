@@ -2,9 +2,9 @@
   <div class="container">
     <div class="footer">
       Powered by {{ author }} @
-      <el-link type="primary" href="https://github.com/yangjian102621/chatgpt-plus" target="_blank">{{ privacy }}
+      <el-link type="primary" href="https://policies.extfans.com/policies/privacy/xuanfeng-ai.html" target="_blank">{{ privacy }}
       </el-link>
-      <el-link type="primary" href="https://github.com/yangjian102621/chatgpt-plus" target="_blank">{{ policies }}
+      <el-link type="primary" href="https://policies.extfans.com/policies/terms/xuanfeng-ai.html" target="_blank">{{ policies }}
       </el-link>
     </div>
   </div>
