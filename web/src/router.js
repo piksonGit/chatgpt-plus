@@ -16,9 +16,9 @@ const routes = [
             },
             {
                 name: 'image-mj',
-                path: '/mj',
-                meta: {title: 'MidJourney 绘画中心'},
-                component: () => import('@/views/ImageMj.vue'),
+                path: '/kl',
+                meta: {title: '可灵 绘画中心'},
+                component: () => import('@/views/ImageKl.vue'),
             },
             {
                 name: 'image-sd',
