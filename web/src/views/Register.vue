@@ -49,7 +49,7 @@
                 </el-input>
               </div>
 
-              <div class="block" v-if="enableMobile || enableEmail">
+               <!-- <div class="block" v-if="enableMobile || enableEmail">
                 <el-row :gutter="10">
                   <el-col :span="12">
                     <el-input placeholder="验证码"
@@ -67,7 +67,7 @@
                     <send-msg size="large" :receiver="formData.username"/>
                   </el-col>
                 </el-row>
-              </div>
+              </div> -->
 
               <div class="block">
                 <el-input placeholder="邀请码"
@@ -184,9 +184,9 @@ const register = function () {
     return ElMessage.error('两次输入密码不一致');
   }
 
-  if ((enableEmail.value || enableMobile.value) && formData.value.code === '') {
-    return ElMessage.error('请输入验证码');
-  }
+  // if ((enableEmail.value || enableMobile.value) && formData.value.code === '') {
+  //   return ElMessage.error('请输入验证码');
+  // }
   httpPost('/api/user/register', formData.value).then((res) => {
     setUserToken(res.data)
     ElMessage.success({

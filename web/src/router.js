@@ -17,7 +17,7 @@ const routes = [
             {
                 name: 'image-mj',
                 path: '/kl',
-                meta: {title: '可灵 绘画中心'},
+                meta: {title: '旋风绘图创作中心'},
                 component: () => import('@/views/ImageKl.vue'),
             },
             {

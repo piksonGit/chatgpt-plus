@@ -54,11 +54,11 @@ import {checkSession} from "@/action/session";
 
 const user = ref({
   vip: false,
-  username: '演示数据',
-  nickname: '演示数据',
+  username: '',
+  nickname: '',
   avatar: '/images/vip.png',
-  mobile: '演示数据',
-  power: 99999,
+  mobile: '',
+  power: 0,
 })
 const vipImg = ref("/images/vip.png")
 

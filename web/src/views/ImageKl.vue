@@ -1,11 +1,11 @@
 <template>
   <div class="page-mj">
-	<p class="tip">本对话由重庆列星文化传播有限公司旋风图片生成大模型算法A生成</p>
+  <p class="tip">本内容由重庆列星文化传播有限公司旋风图片生成大模型算法AI生成</p>
     <div class="inner custom-scroll " style="padding:0px 20px;">
       <div class="mj-box hidden">
-		<p class="tip">本对话由重庆列星文化传播有限公司旋风图片生成大模型算法A生成</p>
+        <p class="tip"></p>
         <h2 class="title">旋风绘图创作中心</h2>
-		
+    
 
         <div class="mj-params hidden" :style="{ height: mjBoxHeight + 'px' }">
           <el-form :model="params" label-width="80px" label-position="left">
@@ -40,7 +40,7 @@
                                style="width: 180px;--el-slider-main-bg-color:#47fff1"/>
                     <el-tooltip effect="light"
                                 content="参数用法：scale 影响文本描述的程度
-									<br />默认值：10 取值范围[1, 30] "
+                  <br />默认值：10 取值范围[1, 30] "
                                 raw-content placement="right">
                       <el-icon>
                         <InfoFilled/>
@@ -72,9 +72,9 @@
         </div>
       </div>
       <div class="task-list-box" @scrollend="handleScrollEnd">
-		 
-		  <h2>旋风绘图创作中心</h2>
-		  
+     
+      <h2>旋风绘图创作中心</h2>
+      
         <div class="task-list-inner" :style="{ height: listBoxHeight + 'px' }">
           <div class="extra-params">
             <el-form>
@@ -104,48 +104,48 @@
                   </div>
                 </el-tab-pane>
                 
-				<el-tab-pane label="图片增强" name="enhance">
-				  <div class="text">以某张图片为底稿来进行效果增强，支持 PNG 和 JPG 格式图片；</div>
-				  <div class="img-inline">
-				    <div class="img-list-box">
-				      <div class="img-item" v-for="imgURL in imgList">
-				        <el-image :src="imgURL" fit="cover"/>
-				        <el-button type="danger" :icon="Delete" @click="removeUploadImage(imgURL)" circle/>
-				      </div>
-				
-				    </div>
-				    <el-upload v-if="imgList.length === 0" class="img-uploader" :auto-upload="true" :show-file-list="false"
-				               :http-request="uploadImg" style="--el-color-primary:#47fff1">
-				      <el-icon class="uploader-icon">
-				        <Plus/>
-				      </el-icon>
-				    </el-upload>
-				  </div>
-				</el-tab-pane>
-				
-				
-				<el-tab-pane label="图片修复" name="repair">
-				  <div class="text">以某张图片为底稿来进行效果修复操作，支持 PNG 和 JPG 格式图片；</div>
-				  <div class="img-inline">
-				    <div class="img-list-box">
-				      <div class="img-item" v-for="imgURL in imgListRepair">
-				        <el-image :src="imgURL" fit="cover"/>
-				        <el-button type="danger" :icon="Delete" @click="removeUploadImage(imgURL)" circle/>
-				      </div>
-				
-				    </div>
-				    <el-upload  v-if="imgListRepair.length === 0" class="img-uploader" :auto-upload="true" :show-file-list="false"
-				               :http-request="uploadImg" style="--el-color-primary:#47fff1">
-				      <el-icon class="uploader-icon">
-				        <Plus/>
-				      </el-icon>
-				    </el-upload>
-				  </div>
-				</el-tab-pane>
-				
-				
+        <el-tab-pane label="图片增强" name="enhance">
+          <div class="text">以某张图片为底稿来进行效果增强，支持 PNG 和 JPG 格式图片；</div>
+          <div class="img-inline">
+            <div class="img-list-box">
+              <div class="img-item" v-for="imgURL in imgList">
+                <el-image :src="imgURL" fit="cover"/>
+                <el-button type="danger" :icon="Delete" @click="removeUploadImage(imgURL)" circle/>
+              </div>
+        
+            </div>
+            <el-upload v-if="imgList.length === 0" class="img-uploader" :auto-upload="true" :show-file-list="false"
+                       :http-request="uploadImg" style="--el-color-primary:#47fff1">
+              <el-icon class="uploader-icon">
+                <Plus/>
+              </el-icon>
+            </el-upload>
+          </div>
+        </el-tab-pane>
+        
+        
+        <el-tab-pane label="图片修复" name="repair">
+          <div class="text">以某张图片为底稿来进行效果修复操作，支持 PNG 和 JPG 格式图片；</div>
+          <div class="img-inline">
+            <div class="img-list-box">
+              <div class="img-item" v-for="imgURL in imgListRepair">
+                <el-image :src="imgURL" fit="cover"/>
+                <el-button type="danger" :icon="Delete" @click="removeUploadImage(imgURL)" circle/>
+              </div>
+        
+            </div>
+            <el-upload  v-if="imgListRepair.length === 0" class="img-uploader" :auto-upload="true" :show-file-list="false"
+                       :http-request="uploadImg" style="--el-color-primary:#47fff1">
+              <el-icon class="uploader-icon">
+                <Plus/>
+              </el-icon>
+            </el-upload>
+          </div>
+        </el-tab-pane>
+        
+        
               </el-tabs>
-			  
+        
 
             <!--  <el-row class="text-info hidden">
                 <el-tag>每次绘图消耗{{ mjPower }}算力，U/V 操作消耗{{ mjActionPower }}算力</el-tag>
@@ -155,7 +155,7 @@
               <div class="submit-btn">
                 <el-button color="#47fff1" :dark="false" @click="generate" round v-if="activeName === 'txt2img'">立即生成</el-button>
               </div>
-			  
+        
             </el-form>
           </div>
 
@@ -379,10 +379,7 @@ const options = [
 const router = useRouter()
 const initParams = {
   device_id: "1",
-  width: 512,
-  height: 288,
   prompt: router.currentRoute.value.params["prompt"] ?? "",
-  seed: 0,
   scale: 10,
   logo_info: {
     add_logo: true,
@@ -393,7 +390,7 @@ const initParams = {
   }
 }
 const params = ref(copyObj(initParams))
-const baseUrl = "https://api-preview-chatgot-io.test690.com";
+const baseUrl = "https://api-preview.chatgot.io";
 
 // 为不同标签页创建独立的图片列表
 const imgList = ref([])  // enhance 标签页使用
@@ -558,8 +555,9 @@ const isOver = ref(false)
 const loading = ref(false)
 const fetchFinishJobs = (page) => {
   loading.value = true
-  // 从LocalStorage获取图片列表
-  const savedImages = JSON.parse(localStorage.getItem('generatedImages') || '[]')
+  // 从LocalStorage获取图片列表，添加用户ID前缀
+  const storageKey = `generatedImages_${userId.value}`
+  const savedImages = JSON.parse(localStorage.getItem(storageKey) || '[]')
   const start = (page - 1) * pageSize.value
   const end = start + pageSize.value
   const pageImages = savedImages.slice(start, end)
@@ -576,6 +574,7 @@ const fetchFinishJobs = (page) => {
   
   nextTick(() => loading.value = false)
 }
+
 
 // 切换图片比例
 const changeRate = (item) => {
@@ -669,6 +668,47 @@ const uploadWatermarkedImage = async (imageUrl) => {
   }
 };
 
+// 添加一个检查和清理存储空间的函数
+const checkAndCleanStorage = (storageKey, newData) => {
+  try {
+    // 尝试存储
+    localStorage.setItem(storageKey, JSON.stringify(newData));
+  } catch (e) {
+    if (e.name === 'QuotaExceededError' || e.message.includes('exceeded the quota')) {
+      // 如果超出配额，清理掉一半的旧数据
+      const currentData = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const halfLength = Math.floor(currentData.length / 2);
+      // 保留最新的一半数据，并添加新数据
+      const newDataArray = [...currentData.slice(0, halfLength)];
+      
+      // 确保新生成的图片被添加到清理后的数组中
+      const latestImage = newData[0]; // 假设新数据是在数组开头
+      if (latestImage && !newDataArray.some(img => img.id === latestImage.id)) {
+        newDataArray.unshift(latestImage);
+      }
+      
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(newDataArray));
+        ElMessage.warning('由于存储空间限制，已自动清理部分历史图片');
+        return newDataArray;
+      } catch (err) {
+        // 如果还是失败，保留最新生成的图片
+        const minimalArray = latestImage ? [latestImage] : [];
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(minimalArray));
+          ElMessage.error('存储空间严重不足，仅保留最新图片');
+          return minimalArray;
+        } catch (finalErr) {
+          localStorage.removeItem(storageKey);
+          ElMessage.error('存储空间已满，无法保存任何图片');
+          return [];
+        }
+      }
+    }
+  }
+  return newData;
+}
+
 // 修改上传图片函数
 const uploadImg = (file) => {
   if (!isLogin.value) {
@@ -732,14 +772,14 @@ const uploadImg = (file) => {
             // 创建 FormData，使用带水印的图片
             const formData = new FormData();
             formData.append('file', watermarkedFile, result.name);
-            formData.append('device_id', getSessionId()+"22");
+            formData.append('device_id', getSessionId()+"_"+userId.value);
             
             let Gurl = "/api/v1/xuanfeng/definition-enhance";
             if (activeName.value == "repair") {
                 Gurl = "/api/v1/xuanfeng/color-enhance";
             }
             
-			
+      
             // 发送带水印的图片到服务器
             fetch(baseUrl + Gurl, {
               method: 'POST',
@@ -756,15 +796,13 @@ const uploadImg = (file) => {
                 const watermarkedUrl = canvas.toDataURL('image/jpeg');
                 
                 if (imgKey.value === '') {
-                  // 添加到上传图片列表
-                  // imgList.value.push(watermarkedUrl);
-                  
-                  // 保存到本地缓存
-                  const savedImages = JSON.parse(localStorage.getItem('generatedImages') || '[]');
+                  // 添加用户ID前缀
+                  const storageKey = `generatedImages_${userId.value}`
+                  const savedImages = JSON.parse(localStorage.getItem(storageKey) || '[]');
                   const newImage = {
                     id: res.data.id || Date.now(),
                     img_url: watermarkedUrl,
-                    thumb_url: watermarkedUrl, // 使用水印图片作为缩略图
+                    thumb_url: watermarkedUrl,
                     progress: 100,
                     can_opt: true,
                     publish: false
@@ -773,35 +811,32 @@ const uploadImg = (file) => {
                   if (savedImages.length > 15) {
                     savedImages.pop(); 
                   }
-				  
                   
-                  localStorage.setItem('generatedImages', JSON.stringify(savedImages));
-                  
-                  // 更新显示列表
-                  finishedJobs.value = savedImages;
+                  // 使用新的存储函数
+                  const finalImages = checkAndCleanStorage(storageKey, savedImages);
+                  finishedJobs.value = finalImages;
                 } else {
-                  // 单张图片上传的情况
                   params.value[imgKey.value] = watermarkedUrl;
                   imgKey.value = '';
                 }
                 
                 ElMessage.success('处理成功');
               } else {
-				  // 特殊处理错误码 40006
-				  if (res.code === 40006) {
-				    ElMessage.error("今天额度已用完，请明天再试")
-				  }else if(res.code === 40004) {
-				    ElMessage.error("无法生成图片")
-				  } else {
-				    ElMessage.error(res.message || "任务推送失败")
-				  }
-				  
+          // 特殊处理错误码 40006
+          if (res.code === 40006) {
+            ElMessage.error("今天额度已用完，请明天再试")
+          }else if(res.code === 40004) {
+            ElMessage.error("无法生成图片")
+          } else {
+            ElMessage.error(res.message || "任务推送失败")
+          }
+          
               }
-			  isGenerating.value = false
+        isGenerating.value = false
             })
             .catch((e) => {
               ElMessage.error('处理失败: ' + (e.message || '网络错误'));
-			  isGenerating.value = false
+        isGenerating.value = false
             });
           }, 'image/jpeg', 0.9); // 设置 JPEG 质量为 0.9
         };
@@ -843,7 +878,7 @@ const generate = () => {
   if (imgList.value.length !== 2 && params.value.task_type === "swapFace") {
     return ElMessage.error("换脸操作需要上传两张图片")
   }
-  params.value.device_id = getSessionId()+"22"
+  params.value.device_id = getSessionId()+"_"+userId.value
   
   params.value.user_id   = userId.value
   Reflect.deleteProperty(params.value, "rate")
@@ -864,13 +899,13 @@ const generate = () => {
       if (res.code === 0 && res.data.status === "done") {
         // 为图片添加水印
         addWatermark(res.data.imageUrls[0]).then(watermarkedImage => {
-          // 保存图片到LocalStorage
-          const savedImages = JSON.parse(localStorage.getItem('generatedImages') || '[]')
+          const storageKey = `generatedImages_${userId.value}`
+          const savedImages = JSON.parse(localStorage.getItem(storageKey) || '[]')
           const newImage = {
             id: res.data.id || Date.now(),
             prompt: params.value.prompt,
             img_url: watermarkedImage,
-            thumb_url: watermarkedImage, // 使用水印图片作为缩略图
+            thumb_url: watermarkedImage,
             progress: 100,
             can_opt: true,
             publish: false
@@ -878,21 +913,19 @@ const generate = () => {
           savedImages.unshift(newImage)
     
           if (savedImages.length > 15) {
-            savedImages.pop(); // 移除数组最后一项（最老的记录）
+            savedImages.pop();
           }
-		  
           
-          localStorage.setItem('generatedImages', JSON.stringify(savedImages))
-          
-          // 更新finishedJobs
-          finishedJobs.value = savedImages
+          // 使用新的存储函数
+          const finalImages = checkAndCleanStorage(storageKey, savedImages);
+          finishedJobs.value = finalImages;
           
           ElMessage.success("绘画完成！")
           power.value -= mjPower.value
           params.value = copyObj(initParams)
           imgList.value = []
         }).catch(err => {
-		  console.log(ElMessage.error(err.message))
+          console.log(err)
           ElMessage.error('图片无法生成');
         });
       } else {
@@ -949,10 +982,11 @@ const removeImage = (item) => {
         type: 'warning',
       }
   ).then(() => {
-    // 从LocalStorage中删除图片
-    const savedImages = JSON.parse(localStorage.getItem('generatedImages') || '[]')
+    // 添加用户ID前缀
+    const storageKey = `generatedImages_${userId.value}`
+    const savedImages = JSON.parse(localStorage.getItem(storageKey) || '[]')
     const newImages = savedImages.filter(img => img.id !== item.id)
-    localStorage.setItem('generatedImages', JSON.stringify(newImages))
+    localStorage.setItem(storageKey, JSON.stringify(newImages))
     
     // 更新finishedJobs
     finishedJobs.value = newImages
@@ -969,18 +1003,18 @@ const publishImage = (item, action) => {
     text = "取消发布"
   }
   
-  // 更新LocalStorage中的发布状态
-  const savedImages = JSON.parse(localStorage.getItem('generatedImages') || '[]')
+  const storageKey = `generatedImages_${userId.value}`
+  const savedImages = JSON.parse(localStorage.getItem(storageKey) || '[]')
   const newImages = savedImages.map(img => {
     if (img.id === item.id) {
       return { ...img, publish: action }
     }
     return img
   })
-  localStorage.setItem('generatedImages', JSON.stringify(newImages))
   
-  // 更新finishedJobs
-  finishedJobs.value = newImages
+  // 使用新的存储函数
+  const finalImages = checkAndCleanStorage(storageKey, newImages);
+  finishedJobs.value = finalImages;
   
   ElMessage.success(text + "成功")
   item.publish = action
@@ -1023,7 +1057,7 @@ function generateRandomId() {
 @import "@/assets/css/image-mj.styl"
 @import "@/assets/css/custom-scroll.styl"
 body{
-	background: #25272d;
+  background: #25272d;
 }
 h2{
     font-weight: 700;
@@ -1031,14 +1065,14 @@ h2{
     color: #47fff1 !important;
 }
 .hidden{
-	display:none;
+  display:none;
 }
 .active{font-weight:500;}
 .tip{
-	background: #010714;
-	border-radius: 10px;
-	padding: 20px;
-	color: #fff;
+  background: #010714;
+  border-radius: 10px;
+  padding: 20px;
+  color: #fff;
 }
 
 /* 添加加载更多按钮的样式 */
